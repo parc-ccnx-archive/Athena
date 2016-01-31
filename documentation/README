@@ -1,0 +1,26 @@
+Current slideware for Athena:
+    AthenaDesign.pdf
+
+Current design documents for Athena:
+    PARC-CCNxAthenaForwarder.pdf
+    PARC-CCNxTransportLinkAdapter.pdf
+
+Skeltons for the TransportLinkAdapter, ContentStore, PIT and FIB are temporarily located in Libccnx/ccnx/common.
+
+Libccnx/ccnx/common
+    ccnx_PIT.c
+    ccnx_PIT.h
+    ccnx_FIB.c
+    ccnx_FIB.h
+    ccnx_TransportLinkAdapter.c
+    ccnx_TransportLinkAdapter.h
+    ccnx_ContentStore.c
+    ccnx_ContentStore.h
+
+The Athena forwarder is located in the Apps directory of Distillery.
+
+Apps/Athena/src
+    athena.c
+    athena.h
+    athenaControl.c
+    athena_About.c

@@ -1,0 +1,17 @@
+Makefile
+autom4te.cache
+config.h
+config.log
+config.status
+stamp-h1
+Athena.xcodeproj/xcuserdata
+Athena.xcodeproj/project.xcworkspace/xcuserdata
+.DS_Store
+.deps
+libtool
+*.log
+*.la
+test_athena_PIT
+athena.out
+.dirstamp
+test_athena_Ethernet.trs

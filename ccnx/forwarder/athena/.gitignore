@@ -1,0 +1,7 @@
+*.o
+*.gcda
+*.gcno
+*.lo
+.libs
+
+libathena.la

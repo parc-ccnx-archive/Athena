@@ -1,0 +1,15 @@
+graph G {
+  n1_9695 [shape=box]
+  n2_9696 [shape=box]
+  n3_9697 [shape=box]
+  n4_9698 [shape=box]
+  n5_9699 [shape=box]
+  n6_9700 [shape=box]
+  n7_9701 [shape=box]
+  n1_9695 -- n5_9699 [label="(n1n5,udp)"]
+  n2_9696 -- n5_9699 [label="(n2n5,udp)"]
+  n2_9696 -- n6_9700 [label="(n2n6,udp)"]
+  n3_9697 -- n6_9700 [label="(n3n6,udp)"]
+  n3_9697 -- n7_9701 [label="(n3n7,udp)"]
+  n4_9698 -- n7_9701 [label="(n4n7,udp)"]
+}
