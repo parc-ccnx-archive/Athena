@@ -1,93 +1,123 @@
 Athena
-=================
+=======
+A CCNx forwarder
 
-A simple forwarder application for CCNx.
+## Quick Start ##
+```
+$ git clone git@github.com:PARC/Athena.git Athena
+$ mkdir Athena.build
+$ cd Athena.build
+$ cmake -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} ../Athena
+$ make
+$ make test
+$ make install
+```
 
-[CCNx.org](https://www.ccnx.org/)
+## Introduction ##
 
-This is ...
+Athena is a CCNx Forwarder.  
 
-The point of ...
+## Using Athena ##
 
-After building, Athana demo consists of 2 programs:
+### Distillery ###
 
-* `athena`: The Athena forwarder
-* `athenaControl`: Application to send control messages to Athena
+Athena is part of [CCNx Distillery](https://github.com/PARC/CCNx_Distillery). You may want to get the software via that distribution if you want to work on CCNx.
 
-REQUIREMENTS
-------------
+### Platforms ###
 
-Athena needs the Distillery CCNx distribution installed on the
-system. Please download and install Distillery. [https://www.ccnx.org/download/] (https://www.ccnx.org/download/)
+Athena has been tested in:
 
-Obtaining Athena
------------------------
+- Ubuntu 14.04 (x86_64)
+- MacOSX 10.10
+- MacOSX 10.11
 
-You can obtain Athena code by downloading it from [github] (https://github.com/PARC/Athena).
+Other platforms and architectures may work.
 
+### Dependencies ###
 
-Building and Running
---------------------
+Build dependencies:
 
-Assuming you've unpacked the Distillery tarball into the default location
-(`/usr/local/ccnx/`), `/usr/local/`, Athena is installed with the rest of the CCNx
-software in `/usr/local/ccnx/bin`.
+- c99 ( clang / gcc )
+- CMake 3.4
 
-Compiling the tutorial:
+Basic dependencies:
 
-1. Go into the Athena directory created when you cloned or unpacked the
-   package:
-   `$ cd Athena`
-
-2. Configure the tutorial program:
-`$ ./configure --prefix=$HOME/ccnx`.
-The `--prefix=` argument specifies the destination directory if you run
- `make install`
-
-3. Compile the tutorial, setting the `LD_RUN_PATH` for the compiled executables:
-`$ make`
-
-4. At this point, the compiled binaries for `athena` and
-`athenaControl` can be found in the `Athena/src` directory.
-
-5. Install the Athena binaries to the specified prefix in the
-configure step (eg `$HOME/ccn`). You will then be able to find the binaries in
-the bin directory (eg `$HOME/ccn/bin`)
-`make install`
-
-6. Start the CCNx forwarder, `athena`:
-`$ /usr/local/ccnx/bin/athena &`
-
-7. ... Running the tutorial_Server and tutorial_Client to test the forwarder ...
-
-## Notes: ##
-
-If you have any problems with the system, please discuss them on the developer
-mailing list:  `ccnx@ccnx.org`.  
+- OpenSSL
+- pthreads
+- Libevent
+- [LongBow](https://github.com/PARC/LongBow)
+- [Libparc](https://github.com/PARC/Libparc)
+- [Libccnx-common](https://github.com/PARC/Libccnx-common)
+- [Libccnx-transport-rta](https://github.com/PARC/Libccnx-transport-rta)
 
 
-CONTACT
--------
+Documentation dependencies:
 
-For any questions please use the CCNx mailing list.  ccnx@ccnx.org
+- Doxygen
 
 
-LICENSE
--------
+### Getting Started ###
 
-Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+Athena is built using cmake. You will need to have CMake 3.4 installed in order to build it.
+
+```
+Download Athena
+$ git clone git@github.com:PARC/Athena.git Athena
+
+Create build directory
+$ mkdir Athena.build
+$ cd Athena.build
+
+Prepare the build, give an install directory
+$ cmake -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} ../Athena
+
+Compile the software
+$ make
+
+Run unit tests
+$ make test
+
+Install the software
+$ make install
+```
+
+This will place the Athena binaries in the `bin` directory of `${INSTALL_DIR}`.
+
+
+
+### Using Athena ###
+
+Athena is a set of binary executables that are used to run a CCNx forwarder instance. Please refer to the Athena documentation for detailed information.  You can also try the -h flags of the executables
+
+- `athena -h`
+- `athenactl -h`
+
+### Contact ###
+
+- [Athena GitHub](https://github.com/PARC/Athena)
+- [CCNx Website](http://www.ccnx.org/)
+- [CCNx Mailing List](https://www.ccnx.org/mailman/listinfo/ccnx/)
+
+
+### License ###
+
+This software is distributed under the following license:
+
+```
+Copyright (c) 2013, 2014, 2015, 2016, Xerox Corporation (Xerox)and Palo Alto
+Research Center (PARC)
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
 
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-    * Patent rights are not granted under this agreement. Patent rights are
-      available under FRAND terms.
+* Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+* Patent rights are not granted under this agreement. Patent rights are
+  available under FRAND terms.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -99,5 +129,4 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-=
+```
