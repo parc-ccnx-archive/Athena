@@ -74,11 +74,12 @@ typedef struct _ETHLinkData {
     PARCDeque *queue;
     PARCHashCodeTable *multiplexTable;
     struct {
-        size_t receive_ReadError;
-        size_t receive_ShortWrite;
         size_t receive_DecodeFailed;
-        size_t receive_NotLinkDestination;
+        size_t receive_NoLinkDestination;
         size_t receive_PeerNotConfigured;
+        size_t send_Error;
+        size_t send_Retry;
+        size_t send_ShortWrite;
     } _stats;
     AthenaEthernet *athenaEthernet;
 } _ETHLinkData;
@@ -107,17 +108,6 @@ _addressToString(const u_int8_t *address, char *buffer)
                 address[0], address[1], address[2],
                 address[3], address[4], address[5]);
     }
-}
-
-static void
-_headerToString(struct ether_header *header, char *buffer)
-{
-    char source[NI_MAXHOST] = { 0 };
-    char destination[NI_MAXHOST] = { 0 };
-
-    _addressToString(header->ether_shost, source);
-    _addressToString(header->ether_dhost, destination);
-    sprintf(buffer, "%s->%s 0x%x\n", source, destination, header->ether_type);
 }
 
 static _ETHLinkData *
@@ -222,6 +212,7 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         array[0].iov_base = &header;
 
         // Message content
+        parcBuffer_SetPosition(wireFormatBuffer, 0);
         array[1].iov_len = parcBuffer_Limit(wireFormatBuffer);
         array[1].iov_base = parcBuffer_Overlay(wireFormatBuffer, array[0].iov_len);
 
@@ -285,18 +276,21 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
 
     // on error close the link, else return to retry a zero write
     if (writeCount == -1) {
-        if (errno == EPIPE) {
-            athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+        if ((errno == EAGAIN) || (errno == EINTR)) {
+            parcLog_Info(athenaTransportLink_GetLogger(athenaTransportLink), "send retry");
+            linkData->_stats.send_Retry++;
+            return -1;
         }
+        athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
                       "send error (%s)", strerror(errno));
-        linkData->_stats.receive_ReadError++;
+        linkData->_stats.send_Error++;
         return -1;
     }
 
     // Short write
     if (writeCount != messageLength) {
-        linkData->_stats.receive_ShortWrite++;
+        linkData->_stats.send_ShortWrite++;
         parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
         return -1;
     }
@@ -472,7 +466,7 @@ _ETHReceiveMessage(AthenaTransportLink *athenaTransportLink, struct ether_addr *
 
     // If the destination does not match my address, drop the message
     if (memcmp(&linkData->link.myAddress, header->ether_dhost, ETHER_ADDR_LEN * sizeof(uint8_t)) != 0) {
-        linkData->_stats.receive_NotLinkDestination++;
+        linkData->_stats.receive_NoLinkDestination++;
         parcBuffer_Release(&message);
         return NULL;
     }
@@ -781,7 +775,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     char name[MAXPATHLEN] = { 0 };
     char *linkName = NULL;
 
-    struct ether_addr srcMAC = { 0 };
+    struct ether_addr srcMAC = { {0} };
     bool srcMACSpecified = false;
 
     size_t mtu = 0;

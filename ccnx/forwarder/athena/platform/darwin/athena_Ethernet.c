@@ -261,7 +261,12 @@ athenaEthernet_Receive(AthenaEthernet *athenaEthernet, int timeout, AthenaTransp
 
         athenaEthernet->readCount = read(athenaEthernet->fd, buffer, athenaEthernet->etherBufferLength);
         if (athenaEthernet->readCount == -1) {
-            parcLog_Error(athenaEthernet->log, "recv: %s\n", strerror(errno));
+            if ((errno == EAGAIN) || (errno == EINTR)) {
+                parcLog_Info(athenaEthernet->log, "Ethernet read retry");
+                return NULL;
+            }
+            parcLog_Error(athenaEthernet->log, "recv: %s", strerror(errno));
+            *events = AthenaTransportLinkEvent_Error;
             parcBuffer_Release(&athenaEthernet->bpfBuffer);
             return NULL;
         }

@@ -77,10 +77,14 @@ typedef struct _TCPLinkData {
         size_t receive_ReadHeaderFailure;
         size_t receive_BadMessageLength;
         size_t receive_ReadError;
+        size_t receive_ReadRetry;
         size_t receive_ReadWouldBlock;
+        size_t receive_PollRetry;
         size_t receive_ShortRead;
-        size_t receive_ShortWrite;
         size_t receive_DecodeFailed;
+        size_t send_ShortWrite;
+        size_t send_Retry;
+        size_t send_Error;
     } _stats;
 } _TCPLinkData;
 
@@ -140,11 +144,40 @@ _createNameFromLinkData(const _TCPLinkData *linkData)
     return parcMemory_StringDuplicate(nameBuffer, strlen(nameBuffer));
 }
 
-static int
-_TCPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+static ssize_t
+_writeLink(AthenaTransportLink *athenaTransportLink, void *buffer, size_t length)
 {
     struct _TCPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
 
+#ifdef LINUX_IGNORESIGPIPE
+    int count = send(linkData->fd, buffer, length, MSG_NOSIGNAL);
+#else
+    ssize_t count = write(linkData->fd, buffer, length);
+#endif
+
+    if (count <= 0) { // on error close the link, else return to retry a zero write
+        if (count == -1) {
+            if ((errno == EAGAIN) || (errno == EINTR)) {
+                parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "send retry (%s)", strerror(errno));
+                linkData->_stats.send_Retry++;
+            } else {
+                athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+                linkData->_stats.send_Error++;
+                parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                              "send error, closing link (%s)", strerror(errno));
+            }
+        } else {
+            linkData->_stats.send_ShortWrite++;
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
+        }
+        return -1;
+    }
+    return count;
+}
+
+static int
+_TCPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+{
     if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
         parcLog_Warning(athenaTransportLink_GetLogger(athenaTransportLink),
                         "sending deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
@@ -178,6 +211,7 @@ _TCPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         wireFormatBuffer = parcBuffer_Acquire(wireFormatBuffer);
     }
 
+    parcBuffer_SetPosition(wireFormatBuffer, 0);
     size_t length = parcBuffer_Limit(wireFormatBuffer);
     char *buffer = parcBuffer_Overlay(wireFormatBuffer, length);
 
@@ -185,25 +219,10 @@ _TCPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
                   "sending message (size=%d)", length);
 
     int writeCount = 0;
-    // If it was a short read, attempt to read the remainder of the message
+    // If a short write, attempt to write the remainder of the message
     while (writeCount < length) {
-#ifdef LINUX_IGNORESIGPIPE
-        int count = send(linkData->fd, &buffer[writeCount], length - writeCount, MSG_NOSIGNAL);
-#else
-        ssize_t count = write(linkData->fd, &buffer[writeCount], length - writeCount);
-#endif
-
-        if (count <= 0) { // on error close the link, else return to retry a zero write
-            if (count == -1) {
-                if (errno == EPIPE) {
-                    athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
-                }
-                parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
-                              "send error (%s)", strerror(errno));
-            } else {
-                linkData->_stats.receive_ShortWrite++;
-                parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
-            }
+        ssize_t count = _writeLink(athenaTransportLink, &buffer[writeCount], length - writeCount);
+        if (count <= 0) {
             parcBuffer_Release(&wireFormatBuffer);
             return -1;
         }
@@ -223,6 +242,11 @@ _linkIsEOF(AthenaTransportLink *athenaTransportLink)
     struct pollfd pollfd = { .fd = linkData->fd, .events = POLLIN };
     int events = poll(&pollfd, 1, 0);
     if (events == -1) {
+        if ((errno == EAGAIN) || (errno == EINTR)) {
+            linkData->_stats.receive_PollRetry++;
+            parcLog_Info(athenaTransportLink_GetLogger(athenaTransportLink), "poll retry (%s)", strerror(errno));
+            return false;
+        }
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "poll error (%s)", strerror(errno));
         return true; // poll error, close the link
     } else if (events == 0) {
@@ -246,6 +270,35 @@ _linkIsEOF(AthenaTransportLink *athenaTransportLink)
     return false;
 }
 
+static ssize_t
+_readLink(AthenaTransportLink *athenaTransportLink, void *buffer, size_t length)
+{
+    struct _TCPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+    ssize_t readCount = read(linkData->fd, buffer, length);
+
+    if (readCount == -1) {
+        if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) { // read blocked
+            linkData->_stats.receive_ReadWouldBlock++;
+        } else {
+            linkData->_stats.receive_ReadError++;
+            athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+        }
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "read error (%s)", strerror(errno));
+    }
+    return readCount;
+}
+
+static void
+_flushLink(AthenaTransportLink *athenaTransportLink)
+{
+    char trash[MAXPATHLEN];
+
+    // Flush link to attempt to resync our framing
+    while (_readLink(athenaTransportLink, trash, sizeof(trash)) == sizeof(trash)) {
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "... flushing link.");
+    }
+}
+
 static CCNxMetaMessage *
 _TCPReceive(AthenaTransportLink *athenaTransportLink)
 {
@@ -255,13 +308,11 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
     // Peek at our message header to determine the total length of buffer we need to allocate.
     size_t fixedHeaderLength = ccnxCodecTlvPacket_MinimalHeaderLength();
     PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(fixedHeaderLength);
-    const uint8_t *peekBuffer = parcBuffer_Overlay(wireFormatBuffer, 0);
+    const uint8_t *messageHeader = parcBuffer_Overlay(wireFormatBuffer, 0);
 
-    ssize_t readCount = recv(linkData->fd, (void *) peekBuffer, fixedHeaderLength, MSG_PEEK);
+    ssize_t readCount = _readLink(athenaTransportLink, (void *) messageHeader, fixedHeaderLength);
 
     if (readCount == -1) {
-        linkData->_stats.receive_ReadError++;
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "read error (%s)", strerror(errno));
         parcBuffer_Release(&wireFormatBuffer);
         return NULL;
     }
@@ -277,11 +328,20 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
         return NULL;
     }
 
-    // Check for a short header read, since we're only peeking here we just return and retry later
-    if (readCount != fixedHeaderLength) {
-        linkData->_stats.receive_ReadHeaderFailure++;
-        parcBuffer_Release(&wireFormatBuffer);
-        return NULL;
+    // If it was a short read, attempt to read the remainder of the header
+    while (readCount < fixedHeaderLength) {
+        ssize_t count = _readLink(athenaTransportLink, (void *) &messageHeader[readCount], fixedHeaderLength - readCount);
+        if (count == -1) {
+            parcBuffer_Release(&wireFormatBuffer);
+            return NULL;
+        }
+        if (count == 0) { // on error or zero read, return to check at the top of TCPReceive for EOF
+            linkData->_stats.receive_ReadHeaderFailure++;
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short read error (%s)", strerror(errno));
+            parcBuffer_Release(&wireFormatBuffer);
+            return NULL;
+        }
+        readCount += count;
     }
 
     // Obtain the total size of the message from the header
@@ -292,11 +352,7 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
     if (messageLength < fixedHeaderLength) {
         linkData->_stats.receive_BadMessageLength++;
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Framing error, flushing link.");
-        char trash[MAXPATHLEN];
-        // Flush link to attempt to resync our framing
-        while (read(linkData->fd, trash, sizeof(trash)) == sizeof(trash)) {
-            parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "... flushing link.");
-        }
+        _flushLink(athenaTransportLink);
         parcBuffer_Release(&wireFormatBuffer);
         return NULL;
     }
@@ -304,12 +360,13 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
     // Allocate the remainder of message buffer and read a message into it.
     wireFormatBuffer = parcBuffer_Resize(wireFormatBuffer, messageLength);
     char *buffer = parcBuffer_Overlay(wireFormatBuffer, 0);
-    readCount = read(linkData->fd, buffer, messageLength);
+    buffer += fixedHeaderLength; // skip past the header we've already read
+    messageLength -= fixedHeaderLength;
+
+    readCount = _readLink(athenaTransportLink, buffer, messageLength);
 
     // On error, just return and retry.
     if (readCount == -1) {
-        linkData->_stats.receive_ReadError++;
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "read error (%s)", strerror(errno));
         parcBuffer_Release(&wireFormatBuffer);
         return NULL;
     }
@@ -323,8 +380,12 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
 
     // If it was a short read, attempt to read the remainder of the message
     while (readCount < messageLength) {
-        ssize_t count = read(linkData->fd, &buffer[readCount], messageLength - readCount);
-        if (count <= 0) { // on error or zero read, return to check at the top of TCPReceive for EOF
+        ssize_t count = _readLink(athenaTransportLink, &buffer[readCount], messageLength - readCount);
+        if (readCount == -1) {
+            parcBuffer_Release(&wireFormatBuffer);
+            return NULL;
+        }
+        if (count == 0) { // on error or zero read, return to check at the top of TCPReceive for EOF
             linkData->_stats.receive_ShortRead++;
             parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short read error (%s)", strerror(errno));
             parcBuffer_Release(&wireFormatBuffer);
@@ -334,7 +395,7 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
     }
 
     parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "received message (size=%d)", readCount);
-    parcBuffer_SetPosition(wireFormatBuffer, parcBuffer_Position(wireFormatBuffer) + readCount);
+    parcBuffer_SetPosition(wireFormatBuffer, fixedHeaderLength + messageLength);
     parcBuffer_Flip(wireFormatBuffer);
 
     // Construct, and return a ccnxMetaMessage from the wire format buffer.
@@ -657,6 +718,13 @@ _TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
     // Normalize the provided hostname
     struct sockaddr_in *addr = (struct sockaddr_in *) parcNetwork_SockAddress(URIAddress, port);
+    if (addr == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to derive sockaddr from address %s", URIAddress);
+        parcURIAuthority_Release(&authority);
+        errno = EINVAL;
+        return NULL;
+    }
     char *address = inet_ntoa(addr->sin_addr);
     parcMemory_Deallocate(&addr);
 

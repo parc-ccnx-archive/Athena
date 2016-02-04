@@ -92,7 +92,7 @@ athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVector
             ccnxControl_Release(&response);
         } break;
         default:
-            parcLog_Error(athena->log, "unknown operation %d\n", cpi_GetMessageOperation(control));
+            parcLog_Error(athena->log, "unknown operation %d", cpi_GetMessageOperation(control));
     }
 
     return 0;
