@@ -70,7 +70,7 @@ typedef struct AthenaLRUContentStoreConfig {
  */
 AthenaLRUContentStore *athenaLRUContentStore_Acquire(const AthenaLRUContentStore *instance);
 
-#ifdef Libccnx_DISABLE_VALIDATION
+#ifdef Athena_DISABLE_VALIDATION
 #  define athenaLRUContentStore_OptionalAssertValid(_instance_)
 #else
 #  define athenaLRUContentStore_OptionalAssertValid(_instance_) athenaLRUContentStore_AssertValid(_instance_)
