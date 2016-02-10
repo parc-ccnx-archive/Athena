@@ -112,7 +112,7 @@ _open_socket(const char *device)
     }
 
     // Attach the requested interface
-    struct ifreq if_idx = { 0 };
+    struct ifreq if_idx = { {0} };
     strncpy(if_idx.ifr_name, device, strlen(device) + 1);
     if (ioctl(etherSocket, BIOCSETIF, &if_idx)) {
         perror("BIOCSETIF");
