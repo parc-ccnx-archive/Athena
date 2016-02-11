@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #include <config.h>
 #include "../athena_TransportLinkModuleTCP.c"
@@ -80,7 +80,6 @@ void
 _removeLink(void *context, PARCBitVector *parcBitVector)
 {
     assertNull(context, "_removeLink called with a non null argument");
-    AthenaTransportLinkAdapter *athenaTransportLinkAdapter = (AthenaTransportLinkAdapter *) context;
 }
 
 LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP_OpenClose)
@@ -89,6 +88,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP_OpenClose)
     const char *result;
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    connectionURI = parcURI_Parse("tcp://xxxx/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
+    parcURI_Release(&connectionURI);
 
     connectionURI = parcURI_Parse("tcp://127.0.0.1/name=TCP_1");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -195,6 +199,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP_Local)
     connectionURI = parcURI_Parse("tcp://127.0.0.1:40000/Listener/name=TCP_0");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp://127.0.0.1:40000/name=TCP_1/local=maybe");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect invalid local flag");
     parcURI_Release(&connectionURI);
 
     connectionURI = parcURI_Parse("tcp://127.0.0.1:40000/name=TCP_1/local=true");

@@ -48,37 +48,6 @@
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 #include <ccnx/common/validation/ccnxValidation_CRC32C.h>
 
-static uint8_t v1_content_nameA_crc32c[] = {
-    0x01, 0x01, 0x00, 85,       // ver = 1, type = content object, length = 85
-    0x00, 0x00, 0x00, 44,       // HopLimit = 31, reserved = 0, header length = 44
-    // ------------------------
-    0x00, 0x04, 0x00, 20,       // ContentObject Fragment, length = 20
-    0x12, 0x23, 0x34, 0x45,
-    0x56, 0x67, 0x78, 0x89,     // fragid 0x1223344556677889
-    0x05, 0xDC, 0x01, 0x00,     // MTU 1500, fragcnt 1, fragnum 0
-    0x01, 0x02, 0x03, 0x04,
-    0x05, 0x06, 0x07, 0x08,     // interest fragment 0x0102030405060708
-    // ------------------------
-    0x00, 0x02, 0x00, 8,        // Recommended Cache Time
-    0x00, 0x00, 0x00, 0x00,
-    0x00, 0x6D, 0xDD, 0x00,     // 2 hours (0x6DDD00 milli seconds)
-    // ------------------------
-    0x00, 0x02, 0x00, 21,       // type = content object, length = 21
-    // ------------------------
-    0x00, 0x00, 0x00, 0x11,     // type = name, length = 17
-    0x00, 0x02, 0x00, 0x05,     // type = binary, length = 5
-    'h',  'e',  'l',  'l',      // "hello"
-    'o',
-    0xF0, 0x00, 0x00, 0x04,     // type = app, length = 4
-    'o',  'u',  'c',  'h',      // "ouch"
-    // ------------------------
-    0x00, 0x03, 0x00, 4,        // validation alg, length = 4
-    0x00, 0x02, 0x00, 0x00,     // CRC32C
-    // ------------------------
-    0x00, 0x04, 0x00, 4,        // validation payload
-    0x2C, 0x3C, 0xC0, 0xAF      // 2C3CC0AF
-};
-
 LONGBOW_TEST_RUNNER(test_athena_ContentStore)
 {
     parcMemory_SetInterface(&PARCSafeMemoryAsPARCMemory);

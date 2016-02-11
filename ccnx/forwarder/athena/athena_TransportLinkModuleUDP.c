@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #include <config.h>
 
@@ -87,10 +87,12 @@ typedef struct _UDPLinkData {
         size_t receive_ReadHeaderFailure;
         size_t receive_BadMessageLength;
         size_t receive_ReadError;
+        size_t receive_ReadRetry;
         size_t receive_ReadWouldBlock;
         size_t receive_ShortRead;
-        size_t receive_ShortWrite;
         size_t receive_DecodeFailed;
+        size_t send_ShortWrite;
+        size_t send_SendRetry;
     } _stats;
 } _UDPLinkData;
 
@@ -199,6 +201,7 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         wireFormatBuffer = parcBuffer_Acquire(wireFormatBuffer);
     }
 
+    parcBuffer_SetPosition(wireFormatBuffer, 0);
     size_t length = parcBuffer_Limit(wireFormatBuffer);
     char *buffer = parcBuffer_Overlay(wireFormatBuffer, length);
 
@@ -224,18 +227,21 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
 
     // on error close the link, else return to retry a zero write
     if (writeCount == -1) {
-        if (errno == EPIPE) {
+        if ((errno == EAGAIN) || (errno == EINTR)) {
+            linkData->_stats.send_SendRetry++;
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "send retry (%s)", strerror(errno));
+        } else {
             athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+            parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "send error (%s)", strerror(errno));
         }
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
-                      "send error (%s)", strerror(errno));
         parcBuffer_Release(&wireFormatBuffer);
         return -1;
     }
 
     // Short write
     if (writeCount != length) {
-        linkData->_stats.receive_ShortWrite++;
+        linkData->_stats.send_ShortWrite++;
         parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
         parcBuffer_Release(&wireFormatBuffer);
         return -1;
@@ -243,38 +249,6 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
 
     parcBuffer_Release(&wireFormatBuffer);
     return 0;
-}
-
-static bool
-_linkIsEOF(AthenaTransportLink *athenaTransportLink)
-{
-    struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
-
-    // If poll indicates there's a read event and a subsequent read returns zero our peer has hungup.
-    struct pollfd pollfd = { .fd = linkData->fd, .events = POLLIN };
-    int events = poll(&pollfd, 1, 0);
-    if (events == -1) {
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "poll error (%s)", strerror(errno));
-        return true; // poll error, close the link
-    } else if (events == 0) {
-        // there are no pending events, was truly a zero read
-        return false;
-    }
-    if (pollfd.revents & POLLIN) {
-        char peekBuffer;
-        ssize_t readCount = recv(linkData->fd, (void *) &peekBuffer, 1, MSG_PEEK);
-        if (readCount == -1) {
-            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) { // read blocked
-                linkData->_stats.receive_ReadWouldBlock++;
-                return false;
-            }
-            return true; // read error
-        }
-        if (readCount == 0) { // EOF
-            return true;
-        }
-    }
-    return false;
 }
 
 static void
@@ -429,19 +403,20 @@ _messageLengthFromHeader(AthenaTransportLink *athenaTransportLink, _UDPLinkData 
     ssize_t readCount = recv(linkData->fd, (void *) peekBuffer, fixedHeaderLength, MSG_PEEK);
 
     if (readCount == -1) {
-        linkData->_stats.receive_ReadError++;
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "read error (%s)", strerror(errno));
         parcBuffer_Release(&wireFormatBuffer);
+        if ((errno == EAGAIN) || (errno == EINTR)) {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "recv retry (%s)", strerror(errno));
+            linkData->_stats.receive_ReadRetry++;
+        } else {
+            linkData->_stats.receive_ReadError++;
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "recv error (%s)", strerror(errno));
+            athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+        }
         return -1;
     }
 
-    // A zero read means either no more data is available or our peer has hungup.
+    // A zero read means no data
     if (readCount == 0) {
-        if (_linkIsEOF(athenaTransportLink)) {
-            athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
-        } else {
-            // A zero read, try again later
-        }
         parcBuffer_Release(&wireFormatBuffer);
         return -1;
     }
@@ -499,11 +474,17 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
     *peerAddressLength = (socklen_t) sizeof(struct sockaddr_in);
     ssize_t readCount = recvfrom(linkData->fd, buffer, messageLength, 0, (struct sockaddr *) peerAddress, peerAddressLength);
 
-    // On error, just return and retry.
+    // On error mark the link to close or retry.
     if (readCount == -1) {
-        linkData->_stats.receive_ReadError++;
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "read error (%s)", strerror(errno));
         parcBuffer_Release(&wireFormatBuffer);
+        if ((errno == EAGAIN) || (errno == EINTR)) {
+            linkData->_stats.receive_ReadRetry++;
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "recv retry (%s)", strerror(errno));
+        } else {
+            linkData->_stats.receive_ReadError++;
+            athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "read error (%s)", strerror(errno));
+        }
         return NULL;
     }
 

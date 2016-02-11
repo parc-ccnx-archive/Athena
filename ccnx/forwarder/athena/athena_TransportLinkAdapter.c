@@ -422,6 +422,9 @@ _AddModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, AthenaTranspo
     assertTrue(parcArrayList_Add(athenaTransportLinkAdapter->moduleList, newTransportLinkModule) == true, "parcArrayList_Add of module failed");
 }
 
+// This method is currently unused, but is available and still tested
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static int
 _RemoveModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *moduleName)
 {
@@ -439,6 +442,7 @@ _RemoveModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char
     errno = ENOENT;
     return -1;
 }
+#pragma GCC diagnostic pop
 
 static AthenaTransportLinkModule *
 _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *moduleName)
