@@ -556,23 +556,26 @@ _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *
     }
     ModuleInit _init = dlsym(linkModule, moduleEntry);
     parcMemory_Deallocate(&moduleEntry);
-    if (_init == NULL) {
+    if (_init == NULL) { // if there is no init method, unload the module if it was loaded
         parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
                       "Unable to find %s module _init method: %s", moduleName, dlerror());
-        if (dlclose(linkModule)) {
-            parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
-                          "Unable to close link module for %s: %s", moduleName, dlerror());
+        if (linkModule != RTLD_DEFAULT) {
+            if (dlclose(linkModule)) {
+                parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
+                              "Unable to close link module for %s: %s", moduleName, dlerror());
+            }
         }
-        dlclose(linkModule);
         errno = ENOENT;
         return NULL;
     }
 
     PARCArrayList *moduleList = _init();
-    if (moduleList == NULL) {
+    if (moduleList == NULL) { // if the init method fails, unload the module if it was loaded
         parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
                       "Empty module list returned from %s module", moduleName);
-        dlclose(linkModule);
+        if (linkModule != RTLD_DEFAULT) {
+            dlclose(linkModule);
+        }
         errno = ENOENT;
         return NULL;
     }
