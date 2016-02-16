@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,43 +26,37 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#ifndef libathena_InterestControl_h
-#define libathena_InterestControl_h
-
-#include "athena.h"
-#include <ccnx/common/ccnx_Interest.h>
-#include <parc/algol/parc_BitVector.h>
-
-#define JSON_KEY_RESULT "result"
-#define JSON_KEY_NAME "name"
-#define JSON_KEY_LINK "link"
+#ifndef libathena_TransportLinkModuleTEMPLATE_h
+#define libathena_TransportLinkModuleTEMPLATE_h
 
 /**
- * @abstract process a CCNx interest control message
+ * @abstract initialize template (TEMPLATE) specific link module
  * @discussion
  *
- * @param [in] athena forwarder context
- * @param [in] control pointer to interest control message to process
- * @param [in] ingressVector link message was received from
- * @return 0 on success
+ * @return list of modules
  *
  * Example:
  * @code
  * {
- *     Athena *athena = athena_Create();
- *     PARCBitVector *ingressVector;
- *     CCNxMetaMessage *ccnxMessage = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &ingressVector, -1)
  *
- *     athenaInterestControl(athena, ccnxMessage, ingressVector);
- *
- *     ccnxMetaMessage_Release(&ccnxMessage);
- *     parcBitVector_Release(&ingressVector);
- *     athena_Release(&athena);
  * }
  * @endcode
  */
-int athenaInterestControl(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressVector);
+PARCArrayList *athenaTransportLinkModuleTEMPLATE_Init();
 
-#endif // libathena_InterestControl_h
+/**
+ * @abstract finalize template (TEMPLATE) specific link module
+ * @discussion
+ *
+ * Example:
+ * @code
+ * {
+ *
+ * }
+ * @endcode
+ */
+void athenaTransportLinkModuleTEMPLATE_Fini();
+
+#endif // libathena_TransportLinkModuleTEMPLATE_h

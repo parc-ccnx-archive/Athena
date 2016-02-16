@@ -174,32 +174,7 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     }
 
     // Get a wire format buffer and write it out.
-    PARCBuffer *wireFormatBuffer = ccnxWireFormatMessage_GetWireFormatBuffer(ccnxMetaMessage);
-
-    if (wireFormatBuffer == NULL) {
-        CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(ccnxMetaMessage);
-        assertNotNull(iovec, "Null io vector");
-
-        size_t iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
-        const struct iovec *array = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
-
-        // If it's a single vector wrap it in a buffer to avoid a copy
-        if (iovcnt == 1) {
-            wireFormatBuffer = parcBuffer_Wrap(array[0].iov_base, array[0].iov_len, 0, array[0].iov_len);
-        } else {
-            size_t totalbytes = 0;
-            for (int i = 0; i < iovcnt; i++) {
-                totalbytes += array[i].iov_len;
-            }
-            wireFormatBuffer = parcBuffer_Allocate(totalbytes);
-            for (int i = 0; i < iovcnt; i++) {
-                parcBuffer_PutArray(wireFormatBuffer, array[i].iov_len, array[i].iov_base);
-            }
-            parcBuffer_Flip(wireFormatBuffer);
-        }
-    } else {
-        wireFormatBuffer = parcBuffer_Acquire(wireFormatBuffer);
-    }
+    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
 
     parcBuffer_SetPosition(wireFormatBuffer, 0);
     size_t length = parcBuffer_Limit(wireFormatBuffer);
@@ -552,8 +527,8 @@ _UDPReceiveListener(AthenaTransportLink *athenaTransportLink)
 static int
 _setSocketOptions(AthenaTransportLinkModule *athenaTransportLinkModule, int fd)
 {
-    int on = 1;
 #ifdef BSD_IGNORESIGPIPE
+    int on = 1;
     int result = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, (void *) &on, sizeof(on));
     if (result) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
@@ -940,4 +915,9 @@ athenaTransportLinkModuleUDP_Init()
     assertTrue(result == true, "parcArrayList_Add failed");
 
     return moduleList;
+}
+
+void
+athenaTransportLinkModuleUDP_Fini()
+{
 }

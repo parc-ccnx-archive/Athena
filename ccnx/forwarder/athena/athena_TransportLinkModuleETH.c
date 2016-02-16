@@ -51,6 +51,7 @@
 #include <parc/algol/parc_HashCodeTable.h>
 #include <parc/algol/parc_Hash.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
+#include <ccnx/forwarder/athena/athena_TransportLinkModuleETH.h>
 #include <ccnx/forwarder/athena/athena_Ethernet.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
@@ -197,66 +198,52 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     int iovcnt = 2;
     size_t messageLength = 0;
 
-    // If the iovec we're prepending to has more than one element, allocate a new iovec of the right size
+    // If the iovec we're prepending to has more than one element, allocatedIovec holds the
+    // allocated IO vector of the right size that we must deallocate before returning.
     struct iovec *allocatedIovec = NULL;
 
     // Attach the header and populate the iovec
 
-    // First, look for an attached PARCBuffer
-    PARCBuffer *wireFormatBuffer = ccnxWireFormatMessage_GetWireFormatBuffer(ccnxMetaMessage);
+    CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
 
-    // If there's a PARCBuffer, convert it to an iovec, otherwise obtain the messages Iovec
-    if (wireFormatBuffer != NULL) {
+    iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
+    const struct iovec *networkBufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
+
+    // Trivial case, single iovec element.
+    if (iovcnt == 1) {
         // Header
         array[0].iov_len = sizeof(struct ether_header);
         array[0].iov_base = &header;
 
         // Message content
-        parcBuffer_SetPosition(wireFormatBuffer, 0);
-        array[1].iov_len = parcBuffer_Limit(wireFormatBuffer);
-        array[1].iov_base = parcBuffer_Overlay(wireFormatBuffer, array[0].iov_len);
-
+        array[1].iov_len = networkBufferIovec->iov_len;
+        array[1].iov_base = networkBufferIovec->iov_base;
         messageLength = array[0].iov_len + array[1].iov_len;
-        parcBuffer_SetPosition(wireFormatBuffer, 0);
     } else {
-        CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(ccnxMetaMessage);
-        assertNotNull(iovec, "Null io vector");
+        // Allocate a new iovec if more than one vector
+        allocatedIovec = parcMemory_Allocate(sizeof(struct iovec) * (iovcnt + 1));
+        array = allocatedIovec;
 
-        iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
-        const struct iovec *bufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
+        // Header
+        array[0].iov_len = sizeof(struct ether_header);
+        array[0].iov_base = &header;
+        messageLength = array[0].iov_len;
 
-        // Trivial case, single iovec element.
-        if (iovcnt == 1) {
-            // Header
-            array[0].iov_len = sizeof(struct ether_header);
-            array[0].iov_base = &header;
-
-            // Message content
-            array[1].iov_len = bufferIovec->iov_len;
-            array[1].iov_base = bufferIovec->iov_base;
-            messageLength = array[0].iov_len + array[1].iov_len;
-        } else {
-            // Allocate a new iovec if more than one vector
-            allocatedIovec = parcMemory_Allocate(sizeof(struct iovec) * (iovcnt + 1));
-            array = allocatedIovec;
-
-            // Header
-            array[0].iov_len = sizeof(struct ether_header);
-            array[0].iov_base = &header;
-            messageLength = array[0].iov_len;
-
-            // Append message content
-            for (int i = 0; i < iovcnt; i++) {
-                array[i + 1].iov_len = bufferIovec[i].iov_len;
-                array[i + 1].iov_base = bufferIovec[i].iov_base;
-                messageLength += array[i + 1].iov_len;
-            }
+        // Append message content
+        for (int i = 0; i < iovcnt; i++) {
+            array[i + 1].iov_len = networkBufferIovec[i].iov_len;
+            array[i + 1].iov_base = networkBufferIovec[i].iov_base;
+            messageLength += array[i + 1].iov_len;
         }
-        iovcnt++; // increment for the header
     }
+    iovcnt++; // increment for the header
 
     if (linkData->link.mtu) {
         if (messageLength > linkData->link.mtu) {
+            if (allocatedIovec != NULL) {
+                parcMemory_Deallocate(&allocatedIovec);
+            }
+            ccnxCodecNetworkBufferIoVec_Release(&iovec);
             errno = EMSGSIZE;
             return -1;
         }
@@ -267,9 +254,10 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
 
     ssize_t writeCount = 0;
     writeCount = athenaEthernet_Send(linkData->athenaEthernet, array, iovcnt);
+    ccnxCodecNetworkBufferIoVec_Release(&iovec);
 
     // Free up any storage allocated for a non-singular iovec
-    if (allocatedIovec != 0) {
+    if (allocatedIovec != NULL) {
         parcMemory_Deallocate(&allocatedIovec);
         array = NULL;
     }
@@ -282,6 +270,7 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
             return -1;
         }
         athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
                       "send error (%s)", strerror(errno));
         linkData->_stats.send_Error++;
@@ -896,4 +885,9 @@ athenaTransportLinkModuleETH_Init()
     assertTrue(result == true, "parcArrayList_Add failed");
 
     return moduleList;
+}
+
+void
+athenaTransportLinkModuleETH_Fini()
+{
 }
