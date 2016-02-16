@@ -527,48 +527,46 @@ _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *
     assertTrue(_LookupModule(athenaTransportLinkAdapter, moduleName) == NULL,
                "attempt to load an already loaded module");
 
-    // Derive the library name from the provided module name
-    const char *moduleLibrary;
-    if ((moduleLibrary = _moduleNameToLibrary(moduleName)) == NULL) {
-        parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
-                      "Unable to derive library name for %s", moduleName);
-        errno = ENOENT;
-        return NULL;
-    }
-
-    void *linkModule = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
-    parcMemory_Deallocate(&moduleLibrary);
-
-    // If the shared library wasn't found, look for the symbol in our existing image.  This
-    // allows a link module to be linked directly into Athena without modifying the forwarder.
-    if (linkModule == NULL) {
-        parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
-                      "Unable to dlopen %s: %s", moduleName, dlerror());
-        linkModule = RTLD_DEFAULT;
-    }
-
+    // Derive the entry initialization name from the provided module name
     const char *moduleEntry;
-    if ((moduleEntry = _moduleNameToInitMethod(moduleName)) == NULL) {
-        parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
-                      "Unable to derive init entry point for %s", moduleName);
-        errno = ENOENT;
-        return NULL;
-    }
-    ModuleInit _init = dlsym(linkModule, moduleEntry);
-    parcMemory_Deallocate(&moduleEntry);
-    if (_init == NULL) { // if there is no init method, unload the module if it was loaded
-        parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
-                      "Unable to find %s module _init method: %s", moduleName, dlerror());
-        if (linkModule != RTLD_DEFAULT) {
-            if (dlclose(linkModule)) {
-                parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
-                              "Unable to close link module for %s: %s", moduleName, dlerror());
-            }
-        }
-        errno = ENOENT;
-        return NULL;
-    }
+    moduleEntry = _moduleNameToInitMethod(moduleName);
 
+    // Check to see if the module was statically linked in.
+    void *linkModule = RTLD_DEFAULT;
+    ModuleInit _init = dlsym(linkModule, moduleEntry);
+
+    // If not statically linked in, look for a shared library and load it from there
+    if (_init == NULL) {
+        // Derive the library name from the provided module name
+        const char *moduleLibrary;
+        moduleLibrary = _moduleNameToLibrary(moduleName);
+
+        void *linkModule = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
+        parcMemory_Deallocate(&moduleLibrary);
+
+        // If the shared library wasn't found, look for the symbol in our existing image.  This
+        // allows a link module to be linked directly into Athena without modifying the forwarder.
+        if (linkModule == NULL) {
+            parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
+                          "Unable to dlopen %s: %s", moduleName, dlerror());
+            parcMemory_Deallocate(&moduleEntry);
+            errno = ENOENT;
+            return NULL;
+        }
+
+        _init = dlsym(linkModule, moduleEntry);
+        if (_init == NULL) {
+            parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
+                          "Unable to find %s module _init method: %s", moduleName, dlerror());
+            parcMemory_Deallocate(&moduleEntry);
+            dlclose(linkModule);
+            errno = ENOENT;
+            return NULL;
+        }
+    }
+    parcMemory_Deallocate(&moduleEntry);
+
+    // Call the initialization method.
     PARCArrayList *moduleList = _init();
     if (moduleList == NULL) { // if the init method fails, unload the module if it was loaded
         parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
@@ -580,6 +578,7 @@ _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *
         return NULL;
     }
 
+    // Process each link module instance (typically only one)
     for (int index = 0; index < parcArrayList_Size(moduleList); index++) {
         AthenaTransportLinkModule *athenaTransportLinkModule = parcArrayList_Get(moduleList, index);
         _AddModule(athenaTransportLinkAdapter, athenaTransportLinkModule);
