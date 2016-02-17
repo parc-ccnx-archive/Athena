@@ -40,6 +40,7 @@
 
 #include <parc/algol/parc_Network.h>
 #include <parc/algol/parc_Time.h>
+#include <parc/algol/parc_Deque.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
@@ -50,12 +51,13 @@
 // Private data for each link instance
 //
 typedef struct _TemplateLinkData {
+    PARCDeque *queue;
+    char *linkIdentity;
     struct {
         size_t receive_ReadHeaderFailure;
         size_t receive_ReadError;
         size_t receive_DecodeFailed;
     } _stats;
-    char *identity;
 } _TemplateLinkData;
 
 static _TemplateLinkData *
@@ -65,11 +67,15 @@ _TemplateLinkData_Create()
     assertNotNull(linkData, "Could not create private data for new link");
 
     // Any identity name can be used as long as it's guaranteed to be unique.
-    // Typically, some identifying attribute of the link is used (such as its sockaddr info)
-    // In this case we're using our current nodes time value.
+    // Typically, we use some identifying attribute of the link (such as its sockaddr info)
+    // In this case we're using the current time.
     CCNxTimeStamp *timeStamp = ccnxTimeStamp_CreateFromCurrentUTCTime();
     char *timeString = ccnxTimeStamp_ToString(timeStamp);
-    linkData->identity = parcMemory_StringDuplicate(timeString, strlen(timeString));
+    ccnxTimeStamp_Release(&timeStamp);
+    linkData->linkIdentity = parcMemory_StringDuplicate(timeString, strlen(timeString));
+    parcMemory_Deallocate(&timeString);
+
+    linkData->queue = parcDeque_Create();
 
     return linkData;
 }
@@ -77,7 +83,8 @@ _TemplateLinkData_Create()
 static void
 _TemplateLinkData_Destroy(_TemplateLinkData **linkData)
 {
-    parcMemory_Deallocate(&((*linkData)->identity));
+    parcMemory_Deallocate(&((*linkData)->linkIdentity));
+    parcDeque_Release(&((*linkData)->queue));
     parcMemory_Deallocate(linkData);
 }
 
@@ -87,7 +94,7 @@ _createNameFromLinkData(const _TemplateLinkData *linkData)
     char nameBuffer[MAXPATHLEN];
     const char *protocol = "template";
 
-    sprintf(nameBuffer, "%s://%s", protocol, linkData->identity);
+    sprintf(nameBuffer, "%s://%s", protocol, linkData->linkIdentity);
 
     return parcMemory_StringDuplicate(nameBuffer, strlen(nameBuffer));
 }
@@ -95,58 +102,17 @@ _createNameFromLinkData(const _TemplateLinkData *linkData)
 static int
 _internalSEND(_TemplateLinkData *linkData, PARCBuffer *wireFormatBuffer)
 {
-    //size_t length = parcBuffer_Limit(wireFormatBuffer);
-    //char *buffer = parcBuffer_Overlay(wireFormatBuffer, length);
-    // send(buffer, length);
+    parcDeque_Append(linkData->queue, parcBuffer_Copy(wireFormatBuffer));
     return 0;
 }
 
 static PARCBuffer * 
 _internalRECEIVE(_TemplateLinkData *linkData)
 {
-    // Peek at the message header to determine the total length of buffer we need to allocate.
-    size_t fixedHeaderLength = ccnxCodecTlvPacket_MinimalHeaderLength();
-    PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(fixedHeaderLength);
-    uint8_t *peekBuffer = parcBuffer_Overlay(wireFormatBuffer, 0);
-    size_t readCount = 0;
-
-    // gather fixedHeaderLength bytes into peekBuffer
-    for (int i = 0; i < fixedHeaderLength; i++) {
-        peekBuffer[i] = i;
+    PARCBuffer *wireFormatBuffer = NULL;
+    if (parcDeque_Size(linkData->queue) > 0) { // if there's another message, send it.
+        wireFormatBuffer = parcDeque_RemoveFirst(linkData->queue);
     }
-    readCount = fixedHeaderLength;
-
-    // Check for a short header read, since we're only peeking here we can return and retry later
-    if (readCount != fixedHeaderLength) {
-        linkData->_stats.receive_ReadHeaderFailure++;
-        parcBuffer_Release(&wireFormatBuffer);
-        return NULL;
-    }
-
-    // Obtain the total size of the message from the header
-    size_t messageLength = ccnxCodecTlvPacket_GetPacketLength(wireFormatBuffer);
-
-    // Allocate the remainder of message buffer and read the message into it.
-    wireFormatBuffer = parcBuffer_Resize(wireFormatBuffer, messageLength);
-    char *buffer = parcBuffer_Overlay(wireFormatBuffer, 0);
-
-    // read remainder of message into buffer
-    for (int i = 0; i < messageLength; i++) {
-        buffer[i] = i;
-    }
-    readCount = messageLength;
-
-    // Check for a short read, may need to flush if the read failed and there's pending data
-    if (readCount != messageLength) {
-        linkData->_stats.receive_ReadError++;
-        parcBuffer_Release(&wireFormatBuffer);
-        return NULL;
-    }
-
-    // Return the new message
-    parcBuffer_SetPosition(wireFormatBuffer, parcBuffer_Position(wireFormatBuffer) + readCount);
-    parcBuffer_Flip(wireFormatBuffer);
-
     return wireFormatBuffer;
 }
 
@@ -160,6 +126,9 @@ _TemplateSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMet
     int result = _internalSEND(linkData, wireFormatBuffer);
 
     parcBuffer_Release(&wireFormatBuffer);
+
+    // Flag there's a message to pickup
+    athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Receive);
     return result;
 }
 
@@ -185,6 +154,9 @@ _TemplateReceive(AthenaTransportLink *athenaTransportLink)
     }
     parcBuffer_Release(&wireFormatBuffer);
 
+    if (parcDeque_Size(linkData->queue) > 0) { // if there's another message, mark an event.
+        athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Receive);
+    }
     return ccnxMetaMessage;
 }
 
@@ -200,7 +172,38 @@ _TemplateClose(AthenaTransportLink *athenaTransportLink)
 #include <parc/algol/parc_URIAuthority.h>
 
 #define LINK_NAME_SPECIFIER "name%3D"
+
+static const char *
+_parseLinkName(const char *token)
+{
+    char name[MAXPATHLEN] = { 0 };
+    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+        parcMemory_Deallocate(&token);
+        return NULL;
+    }
+    parcMemory_Deallocate(&token);
+    return parcMemory_StringDuplicate(name, strlen(name));
+}
+
 #define LOCAL_LINK_FLAG "local%3D"
+
+static int
+_parseLocalFlag(const char *token)
+{
+    int forceLocal = 0;
+    char localFlag[MAXPATHLEN] = { 0 };
+    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
+        parcMemory_Deallocate(&token);
+        return 0;
+    }
+    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
+        forceLocal = AthenaTransportLink_ForcedNonLocal;
+    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
+        forceLocal = AthenaTransportLink_ForcedLocal;
+    }
+    parcMemory_Deallocate(&token);
+    return forceLocal;
+}
 
 static AthenaTransportLink *
 _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
@@ -213,15 +216,18 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         errno = EINVAL;
         return NULL;
     }
+
+    //
+    // This template link module doesn't use the authority fields.
+    // The access methods are here for use by derived link modules, if needed.
+    //
     PARCURIAuthority *authority = parcURIAuthority_Parse(authorityString);
     //const char *URIAddress = parcURIAuthority_GetHostName(authority);
     //in_port_t port = parcURIAuthority_GetPort(authority);
     parcURIAuthority_Release(&authority);
 
-    char name[MAXPATHLEN] = { 0 };
-    char localFlag[MAXPATHLEN] = { 0 };
     int forceLocal = 0;
-    const char *linkName = NULL;
+    const char *specifiedLinkName = NULL;
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
     size_t segments = parcURIPath_Count(remainder);
@@ -230,38 +236,24 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         const char *token = parcURISegment_ToString(segment);
 
         if (strncasecmp(token, LINK_NAME_SPECIFIER, strlen(LINK_NAME_SPECIFIER)) == 0) {
-            if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+            specifiedLinkName = _parseLinkName(token);
+            if (specifiedLinkName == NULL) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection name specification (%s)", token);
-                parcMemory_Deallocate(&token);
                 errno = EINVAL;
                 return NULL;
             }
-            linkName = name;
-            parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LOCAL_LINK_FLAG, strlen(LOCAL_LINK_FLAG)) == 0) {
-            if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
+            forceLocal = _parseLocalFlag(token);
+            if (forceLocal == 0) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper local specification (%s)", token);
-                parcMemory_Deallocate(&token);
                 errno = EINVAL;
                 return NULL;
             }
-            if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
-                forceLocal = AthenaTransportLink_ForcedNonLocal;
-            } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
-                forceLocal = AthenaTransportLink_ForcedLocal;
-            } else {
-                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                              "Improper local state specification (%s)", token);
-                parcMemory_Deallocate(&token);
-                errno = EINVAL;
-                return NULL;
-            }
-            parcMemory_Deallocate(&token);
             continue;
         }
 
@@ -272,14 +264,15 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         return NULL;
     }
 
-    const char *derivedLinkName;
-
     _TemplateLinkData *linkData = _TemplateLinkData_Create();
 
-    derivedLinkName = _createNameFromLinkData(linkData);
+    const char *derivedLinkName = _createNameFromLinkData(linkData);
+    const char *linkName = NULL;
 
-    if (linkName == NULL) {
+    if (specifiedLinkName == NULL) {
         linkName = derivedLinkName;
+    } else {
+        linkName = specifiedLinkName;
     }
 
     AthenaTransportLink *athenaTransportLink = athenaTransportLink_Create(linkName,
@@ -290,17 +283,19 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "athenaTransportLink_Create failed");
         parcMemory_Deallocate(&derivedLinkName);
+        parcMemory_Deallocate(&specifiedLinkName);
         _TemplateLinkData_Destroy(&linkData);
         return athenaTransportLink;
     }
 
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
-    //athenaTransportLink_SetLocal(athenaTransportLink, isLocal);
+    athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Send);
 
     parcLog_Info(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                  "new link established: Name=\"%s\" (%s)", linkName, derivedLinkName);
 
     parcMemory_Deallocate(&derivedLinkName);
+    parcMemory_Deallocate(&specifiedLinkName);
 
     // forced IsLocal/IsNotLocal, mainly for testing
     if (athenaTransportLink && forceLocal) {
