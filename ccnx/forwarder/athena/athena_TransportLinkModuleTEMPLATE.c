@@ -1,18 +1,18 @@
 /*
  * Copyright (c) 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
- *  
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- *  
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution. 
+ *       documentation and/or other materials provided with the distribution.
  *     * Patent rights are not granted under this agreement. Patent rights are
  *       available under FRAND terms.
- *  
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -106,7 +106,7 @@ _internalSEND(_TemplateLinkData *linkData, PARCBuffer *wireFormatBuffer)
     return 0;
 }
 
-static PARCBuffer * 
+static PARCBuffer *
 _internalRECEIVE(_TemplateLinkData *linkData)
 {
     PARCBuffer *wireFormatBuffer = NULL;
@@ -172,20 +172,16 @@ _TemplateClose(AthenaTransportLink *athenaTransportLink)
 #include <parc/algol/parc_URIAuthority.h>
 
 #define LINK_NAME_SPECIFIER "name%3D"
-
-static const char *
-_parseLinkName(const char *token)
-{
-    char name[MAXPATHLEN] = { 0 };
-    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
-        parcMemory_Deallocate(&token);
-        return NULL;
-    }
-    parcMemory_Deallocate(&token);
-    return parcMemory_StringDuplicate(name, strlen(name));
-}
-
 #define LOCAL_LINK_FLAG "local%3D"
+
+static int
+_parseLinkName(const char *token, char *name)
+{
+    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+        return -1;
+    }
+    return 0;
+}
 
 static int
 _parseLocalFlag(const char *token)
@@ -193,7 +189,6 @@ _parseLocalFlag(const char *token)
     int forceLocal = 0;
     char localFlag[MAXPATHLEN] = { 0 };
     if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
-        parcMemory_Deallocate(&token);
         return 0;
     }
     if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
@@ -201,7 +196,6 @@ _parseLocalFlag(const char *token)
     } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
         forceLocal = AthenaTransportLink_ForcedLocal;
     }
-    parcMemory_Deallocate(&token);
     return forceLocal;
 }
 
@@ -227,8 +221,10 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
     parcURIAuthority_Release(&authority);
 
     int forceLocal = 0;
-    const char *specifiedLinkName = NULL;
+    char specifiedLinkName[MAXPATHLEN] = { 0 };
+    const char *linkName = NULL;
 
+    // Parse connection segment parameters, Name and Local
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
     size_t segments = parcURIPath_Count(remainder);
     for (int i = 0; i < segments; i++) {
@@ -236,13 +232,15 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         const char *token = parcURISegment_ToString(segment);
 
         if (strncasecmp(token, LINK_NAME_SPECIFIER, strlen(LINK_NAME_SPECIFIER)) == 0) {
-            specifiedLinkName = _parseLinkName(token);
-            if (specifiedLinkName == NULL) {
+            if (_parseLinkName(token, specifiedLinkName) != 0) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection name specification (%s)", token);
+                parcMemory_Deallocate(&token);
                 errno = EINVAL;
                 return NULL;
             }
+            linkName = specifiedLinkName;
+            parcMemory_Deallocate(&token);
             continue;
         }
 
@@ -251,9 +249,11 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
             if (forceLocal == 0) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper local specification (%s)", token);
+                parcMemory_Deallocate(&token);
                 errno = EINVAL;
                 return NULL;
             }
+            parcMemory_Deallocate(&token);
             continue;
         }
 
@@ -267,12 +267,9 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
     _TemplateLinkData *linkData = _TemplateLinkData_Create();
 
     const char *derivedLinkName = _createNameFromLinkData(linkData);
-    const char *linkName = NULL;
 
-    if (specifiedLinkName == NULL) {
+    if (linkName == NULL) {
         linkName = derivedLinkName;
-    } else {
-        linkName = specifiedLinkName;
     }
 
     AthenaTransportLink *athenaTransportLink = athenaTransportLink_Create(linkName,
@@ -283,7 +280,6 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "athenaTransportLink_Create failed");
         parcMemory_Deallocate(&derivedLinkName);
-        parcMemory_Deallocate(&specifiedLinkName);
         _TemplateLinkData_Destroy(&linkData);
         return athenaTransportLink;
     }
@@ -295,7 +291,6 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
                  "new link established: Name=\"%s\" (%s)", linkName, derivedLinkName);
 
     parcMemory_Deallocate(&derivedLinkName);
-    parcMemory_Deallocate(&specifiedLinkName);
 
     // forced IsLocal/IsNotLocal, mainly for testing
     if (athenaTransportLink && forceLocal) {

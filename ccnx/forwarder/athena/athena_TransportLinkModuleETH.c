@@ -672,16 +672,59 @@ _ETHOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     return athenaTransportLink;
 }
 
-#define ETH_LISTENER_FLAG "listener"
 #define LINK_NAME_SPECIFIER "name%3D"
-#define SRC_LINK_SPECIFIER "src%3D"
 #define LOCAL_LINK_FLAG "local%3D"
 #define LINK_MTU_SIZE "mtu%3D"
-
-#include <parc/algol/parc_URIAuthority.h>
+#define SRC_LINK_SPECIFIER "src%3D"
+#define ETH_LISTENER_FLAG "listener"
 
 static int
-_parse_address(const char *string, struct ether_addr *address)
+_parseLinkName(const char *token, char *name)
+{
+    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+        return -1;
+    }
+    return 0;
+}
+
+static int
+_parseLocalFlag(const char *token)
+{
+    int forceLocal = 0;
+    char localFlag[MAXPATHLEN] = { 0 };
+    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
+        return 0;
+    }
+    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
+        forceLocal = AthenaTransportLink_ForcedNonLocal;
+    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
+        forceLocal = AthenaTransportLink_ForcedLocal;
+    }
+    return forceLocal;
+}
+
+static size_t
+_parseMTU(const char *token, size_t *mtu)
+{
+    if (sscanf(token, "%*[^%%]%%3D%zd", mtu) != 1) {
+        return -1;
+    }
+    return *mtu;
+}
+
+static int
+_parseSrc(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, struct ether_addr *srcMAC)
+{
+    char srcAddressString[NI_MAXHOST];
+    if (sscanf(token, "%*[^%%]%%3D%[^%%]", srcAddressString) != 1) {
+        errno = EINVAL;
+        return -1;
+    }
+    return _stringToEtherAddr(srcMAC, srcAddressString);
+}
+
+static int
+_parseAddress(const char *string, struct ether_addr *address)
 {
     char addressString[NI_MAXHOST] = { 0 };
     char device[NI_MAXHOST] = { 0 };
@@ -696,43 +739,7 @@ _parse_address(const char *string, struct ether_addr *address)
     return 0;
 }
 
-static int
-_parse_src(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, struct ether_addr *srcMAC)
-{
-    char srcAddressString[NI_MAXHOST];
-    if (sscanf(token, "%*[^%%]%%3D%[^%%]", srcAddressString) != 1) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Improper connection source specification (%s)", token);
-        errno = EINVAL;
-        return -1;
-    }
-    return _stringToEtherAddr(srcMAC, srcAddressString);
-}
-
-static int
-_parse_local(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, int *forceLocal)
-{
-    char localFlag[MAXPATHLEN] = { 0 };
-
-    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Improper local specification (%s)", token);
-        errno = EINVAL;
-        return -1;
-    }
-    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
-        *forceLocal = AthenaTransportLink_ForcedNonLocal;
-    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
-        *forceLocal = AthenaTransportLink_ForcedLocal;
-    } else {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Improper local state specification (%s)", token);
-        parcMemory_Deallocate(&token);
-        errno = EINVAL;
-        return -1;
-    }
-    return 0;
-}
+#include <parc/algol/parc_URIAuthority.h>
 
 static AthenaTransportLink *
 _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
@@ -750,25 +757,21 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     PARCURIAuthority *authority = parcURIAuthority_Parse(authorityString);
     const char *URIHostname = parcURIAuthority_GetHostName(authority);
     strcpy(device, URIHostname);
-    struct ether_addr destMAC;
-    if (_parse_address(authorityString, &destMAC) != 0) {
+
+    bool srcMACSpecified = false;
+    struct ether_addr srcMAC = { { 0 } };
+    struct ether_addr destMAC = { { 0 } };
+    if (_parseAddress(authorityString, &destMAC) != 0) {
         parcURIAuthority_Release(&authority);
         errno = EINVAL;
         return NULL;
     }
-
     parcURIAuthority_Release(&authority);
 
-    bool listener = false;
-
-    char name[MAXPATHLEN] = { 0 };
+    bool isListener = false;
     char *linkName = NULL;
-
-    struct ether_addr srcMAC = { {0} };
-    bool srcMACSpecified = false;
-
+    char specifiedLinkName[MAXPATHLEN] = { 0 };
     size_t mtu = 0;
-
     int forceLocal = 0;
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
@@ -782,24 +785,25 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
             if (srcMACSpecified == false) {
                 memcpy(&srcMAC, &destMAC, sizeof(struct ether_addr));
             }
-            listener = true;
+            isListener = true;
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, SRC_LINK_SPECIFIER, strlen(SRC_LINK_SPECIFIER)) == 0) {
-            if (_parse_src(athenaTransportLinkModule, token, &srcMAC) == 0) {
-                srcMACSpecified = true;
-                parcMemory_Deallocate(&token);
-                continue;
-            } else {
+            if (_parseSrc(athenaTransportLinkModule, token, &srcMAC) != 0) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Improper connection source specification (%s)", token);
                 parcMemory_Deallocate(&token);
                 return NULL;
             }
+            srcMACSpecified = true;
+            parcMemory_Deallocate(&token);
+            continue;
         }
 
         if (strncasecmp(token, LINK_MTU_SIZE, strlen(LINK_MTU_SIZE)) == 0) {
-            if (sscanf(token, "%*[^%%]%%3D%zd", &mtu) != 1) {
+            if (_parseMTU(token, &mtu) == -1) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper MTU specification (%s)", token);
                 parcMemory_Deallocate(&token);
@@ -811,26 +815,29 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         }
 
         if (strncasecmp(token, LINK_NAME_SPECIFIER, strlen(LINK_NAME_SPECIFIER)) == 0) {
-            if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+            if (_parseLinkName(token, specifiedLinkName) != 0) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection name specification (%s)", token);
                 parcMemory_Deallocate(&token);
                 errno = EINVAL;
                 return NULL;
             }
-            linkName = name;
+            linkName = specifiedLinkName;
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LOCAL_LINK_FLAG, strlen(LOCAL_LINK_FLAG)) == 0) {
-            if (_parse_local(athenaTransportLinkModule, token, &forceLocal) == 0) {
+            forceLocal = _parseLocalFlag(token);
+            if (forceLocal == 0) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Improper local specification (%s)", token);
                 parcMemory_Deallocate(&token);
-                continue;
-            } else {
-                parcMemory_Deallocate(&token);
+                errno = EINVAL;
                 return NULL;
             }
+            parcMemory_Deallocate(&token);
+            continue;
         }
 
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
@@ -840,7 +847,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         return NULL;
     }
 
-    if (listener) {
+    if (isListener) {
         result = _ETHOpenListener(athenaTransportLinkModule, linkName, device, &srcMAC, mtu);
     } else {
         if (srcMACSpecified) {

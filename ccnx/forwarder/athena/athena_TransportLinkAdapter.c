@@ -427,7 +427,7 @@ _AddModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, AthenaTranspo
 
 // This method is currently unused, but is available and is still diligently tested
 #ifdef __GNUC__
-__attribute__ ((unused)) 
+__attribute__ ((unused))
 #else
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
