@@ -285,7 +285,7 @@ athenaTransportLinkModule_GetMessageIoVector(CCNxMetaMessage *message)
 {
     CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(message);
 
-    // If there was no io vector present, check for a bufer and convert that into an iovec
+    // If there was no io vector present, check for a buffer and convert that into an iovec
     if (iovec == NULL) {
         PARCBuffer *buffer = ccnxWireFormatMessage_GetWireFormatBuffer(message);
         assertNotNull(buffer, "Null message buffer");
