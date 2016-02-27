@@ -98,7 +98,7 @@ if ( UNIX )
   execute_process(COMMAND whoami OUTPUT_VARIABLE USER 
 	    OUTPUT_STRIP_TRAILING_WHITESPACE)
   if ( ${USER} STREQUAL "root" )
-	add_subdirector(platform/darwin/test)
+	add_subdirectory(platform/darwin/test)
 	add_subdirectory(platform/linux/test)
   endif()
 endif()
