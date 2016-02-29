@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,10 +26,10 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#ifndef athenactl_h
-#define athenactl_h
+#ifndef libathenactl_h
+#define libathenactl_h
 
 #include <ccnx/forwarder/athena/athena.h>
 
@@ -108,4 +108,4 @@ void athenactl_Usage(void);
  * @endcode
  */
 void athenactl_EncodeMessage(CCNxMetaMessage *message);
-#endif // athenactl_h
+#endif // libathenactl_h

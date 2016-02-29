@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 
 /*
@@ -83,6 +83,8 @@
 
 #include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkAdapter.h>
+
+typedef PARCArrayList *(*ModuleInit)(void);
 
 /**
  * @typedef AthenaTransportLinkAdapter
@@ -419,12 +421,17 @@ _AddModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, AthenaTranspo
                                                     (AthenaTransportLinkModule_RemoveLinkCallback *) _athenaTransportLinkAdapter_RemoveLink,
                                                     athenaTransportLinkAdapter);
 
-    assertTrue(parcArrayList_Add(athenaTransportLinkAdapter->moduleList, newTransportLinkModule) == true, "parcArrayList_Add of module failed");
+    bool result = parcArrayList_Add(athenaTransportLinkAdapter->moduleList, newTransportLinkModule);
+    assertTrue(result, "parcArrayList_Add of module failed");
 }
 
-// This method is currently unused, but is available and still tested
+// This method is currently unused, but is available and is still diligently tested
+#ifdef __GNUC__
+__attribute__ ((unused))
+#else
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 static int
 _RemoveModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *moduleName)
 {
@@ -442,31 +449,142 @@ _RemoveModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char
     errno = ENOENT;
     return -1;
 }
+#ifndef __GNUC__
 #pragma GCC diagnostic pop
+#endif
+
+#include <ctype.h>
+
+static const char *
+_strtoupper(const char *string)
+{
+    char *upperCaseString = parcMemory_StringDuplicate(string, strlen(string));
+    for (char *i = upperCaseString; *i; i++) {
+        *i = toupper(*i);
+    }
+    return upperCaseString;
+}
+
+#define METHOD_PREFIX "athenaTransportLinkModule"
+#define INIT_METHOD_SUFFIX "_Init"
+
+static const char *
+_moduleNameToInitMethod(const char *moduleName)
+{
+    char *result = NULL;
+
+    assertNotNull(moduleName, "module name must not be null");
+    const char *module = _strtoupper(moduleName);
+    PARCBufferComposer *composer = parcBufferComposer_Create();
+    if (composer != NULL) {
+        parcBufferComposer_Format(composer, "%s%s%s",
+                                  METHOD_PREFIX, module, INIT_METHOD_SUFFIX);
+        PARCBuffer *tempBuffer = parcBufferComposer_ProduceBuffer(composer);
+        parcBufferComposer_Release(&composer);
+
+        result = parcBuffer_ToString(tempBuffer);
+        parcBuffer_Release(&tempBuffer);
+    }
+
+    parcMemory_Deallocate(&module);
+    return result;
+}
+
+#define LIBRARY_MODULE_PREFIX "libathena_"
+#ifdef __linux__
+#define LIBRARY_MODULE_SUFFIX ".so"
+#else // MacOS
+#define LIBRARY_MODULE_SUFFIX ".dylib"
+#endif
+
+static const char *
+_moduleNameToLibrary(const char *moduleName)
+{
+    char *result = NULL;
+
+    assertNotNull(moduleName, "module name must not be null");
+    const char *module = _strtoupper(moduleName);
+    PARCBufferComposer *composer = parcBufferComposer_Create();
+    if (composer != NULL) {
+        parcBufferComposer_Format(composer, "%s%s%s",
+                                  LIBRARY_MODULE_PREFIX, module, LIBRARY_MODULE_SUFFIX);
+        PARCBuffer *tempBuffer = parcBufferComposer_ProduceBuffer(composer);
+        parcBufferComposer_Release(&composer);
+
+        result = parcBuffer_ToString(tempBuffer);
+        parcBuffer_Release(&tempBuffer);
+    }
+
+    parcMemory_Deallocate(&module);
+    return result;
+}
+
+#include <dlfcn.h>
 
 static AthenaTransportLinkModule *
 _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *moduleName)
 {
-    PARCArrayList *newModuleList = NULL;
+    assertTrue(_LookupModule(athenaTransportLinkAdapter, moduleName) == NULL,
+               "attempt to load an already loaded module");
 
-    // XXX need to dynamically load these, they're all hardwired for now
-    if (strcasecmp(moduleName, "TCP") == 0) {
-        newModuleList = athenaTransportLinkModuleTCP_Init();
-    }
-    if (strcasecmp(moduleName, "UDP") == 0) {
-        newModuleList = athenaTransportLinkModuleUDP_Init();
-    }
-    if (strcasecmp(moduleName, "ETH") == 0) {
-        newModuleList = athenaTransportLinkModuleETH_Init();
-    }
+    // Derive the entry initialization name from the provided module name
+    const char *moduleEntry;
+    moduleEntry = _moduleNameToInitMethod(moduleName);
 
-    if (newModuleList) {
-        for (int index = 0; index < parcArrayList_Size(newModuleList); index++) {
-            AthenaTransportLinkModule *athenaTransportLinkModule = parcArrayList_Get(newModuleList, index);
-            _AddModule(athenaTransportLinkAdapter, athenaTransportLinkModule);
+    // Check to see if the module was statically linked in.
+    void *linkModule = RTLD_DEFAULT;
+    ModuleInit _init = dlsym(linkModule, moduleEntry);
+
+    // If not statically linked in, look for a shared library and load it from there
+    if (_init == NULL) {
+        // Derive the library name from the provided module name
+        const char *moduleLibrary;
+        moduleLibrary = _moduleNameToLibrary(moduleName);
+
+        void *linkModule = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
+        parcMemory_Deallocate(&moduleLibrary);
+
+        // If the shared library wasn't found, look for the symbol in our existing image.  This
+        // allows a link module to be linked directly into Athena without modifying the forwarder.
+        if (linkModule == NULL) {
+            parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
+                          "Unable to dlopen %s: %s", moduleName, dlerror());
+            parcMemory_Deallocate(&moduleEntry);
+            errno = ENOENT;
+            return NULL;
         }
-        parcArrayList_Destroy(&newModuleList);
+
+        _init = dlsym(linkModule, moduleEntry);
+        if (_init == NULL) {
+            parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
+                          "Unable to find %s module _init method: %s", moduleName, dlerror());
+            parcMemory_Deallocate(&moduleEntry);
+            dlclose(linkModule);
+            errno = ENOENT;
+            return NULL;
+        }
     }
+    parcMemory_Deallocate(&moduleEntry);
+
+    // Call the initialization method.
+    PARCArrayList *moduleList = _init();
+    if (moduleList == NULL) { // if the init method fails, unload the module if it was loaded
+        parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
+                      "Empty module list returned from %s module", moduleName);
+        if (linkModule != RTLD_DEFAULT) {
+            dlclose(linkModule);
+        }
+        errno = ENOENT;
+        return NULL;
+    }
+
+    // Process each link module instance (typically only one)
+    for (int index = 0; index < parcArrayList_Size(moduleList); index++) {
+        AthenaTransportLinkModule *athenaTransportLinkModule = parcArrayList_Get(moduleList, index);
+        _AddModule(athenaTransportLinkAdapter, athenaTransportLinkModule);
+    }
+    parcArrayList_Destroy(&moduleList);
+
     return _LookupModule(athenaTransportLinkAdapter, moduleName);
 }
 

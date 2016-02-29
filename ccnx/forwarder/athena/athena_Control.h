@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,10 +26,10 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#ifndef athena_Control_h
-#define athena_Control_h
+#ifndef libathena_Control_h
+#define libathena_Control_h
 
 #include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/common/ccnx_Interest.h>
@@ -73,4 +73,4 @@ int athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVe
  * @return a `CCNxMetaMessage` instance containing a response.
  */
 CCNxMetaMessage *athenaControl_ProcessMessage(Athena *athena, const CCNxMetaMessage *message);
-#endif // athena_Control_h
+#endif // libathena_Control_h
