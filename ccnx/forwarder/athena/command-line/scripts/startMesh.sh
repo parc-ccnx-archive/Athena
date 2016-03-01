@@ -70,8 +70,8 @@ NOTLOCAL="local=false"
 ATHENA=../../../../../../../usr/bin/athena
 ATHENACTL=../../../../../../../usr/bin/athenactl
 PARC_PUBLICKEY=../../../../../../../usr/bin/parc-publickey
-TUTORIAL_SERVER=../../../../../../../usr/bin/simpleFileTransferTutorial_Server
-TUTORIAL_CLIENT=../../../../../../../usr/bin/simpleFileTransferTutorial_Client
+TUTORIAL_SERVER=../../../../../../../usr/bin/ccnxSimpleFileTransfer_Server
+TUTORIAL_CLIENT=../../../../../../../usr/bin/ccnxSimpleFileTransfer_Client
 
 DEPENDENCIES="ATHENA ATHENACTL PARC_PUBLICKEY TUTORIAL_SERVER TUTORIAL_CLIENT"
 
