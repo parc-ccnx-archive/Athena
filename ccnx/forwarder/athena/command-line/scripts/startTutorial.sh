@@ -39,11 +39,6 @@
 #
 
 #
-# Set ATHENADIR to your CCNx build
-#
-ATHENADIR=${CCNX_HOME:-../../../../../../../usr}
-
-#
 # URI to service, routes are set on each forwarder instance to forward this URI to its neighbor
 #
 URI=lci:/ccnx/tutorial
@@ -71,15 +66,51 @@ NOTLOCAL="local=false"
 #####
 #####
 
-ATHENA="${ATHENADIR}/bin/athena -d"
-ATHENACTL="${ATHENADIR}/bin/athenactl -p ${PASSWORD} -f ${KEYFILE}"
-TUTORIAL_SERVER=${ATHENADIR}/bin/tutorial_Server
-TUTORIAL_CLIENT=${ATHENADIR}/bin/tutorial_Client
+#
+# Default locations for applications that we depend upon
+#
+ATHENA=../../../../../../../usr/bin/athena
+ATHENACTL=../../../../../../../usr/bin/athenactl
+PARC_PUBLICKEY=../../../../../../../usr/bin/parc-publickey
+TUTORIAL_SERVER=../../../../../../../usr/bin/simpleFileTransferTutorial_Server
+TUTORIAL_CLIENT=../../../../../../../usr/bin/simpleFileTransferTutorial_Client
+
+DEPENDENCIES="ATHENA ATHENACTL PARC_PUBLICKEY TUTORIAL_SERVER TUTORIAL_CLIENT"
+
+#
+# Check any set CCNX_HOME/PARC_HOME environment settings, then the default path, then our build directories.
+#
+for program in ${DEPENDENCIES}
+do
+    eval defaultPath=\${${program}}               # <NAME>=<DEFAULT_PATH>
+    appName=`expr ${defaultPath} : '.*/\(.*\)'`
+    if [ -x ${CCNX_HOME}/bin/${appName} ]; then   # check CCNX_HOME
+        eval ${program}=${CCNX_HOME}/bin/${appName}
+    elif [ -x ${PARC_HOME}/bin/${appName} ]; then # check PARC_HOME
+        eval ${program}=${PARC_HOME}/bin/${appName}
+    else                                          # check PATH
+        eval ${program}=""
+        localPathLookup=`which ${appName}`
+        if [ $? -eq 0 ]; then
+            eval ${program}=${localPathLookup}
+        else                                      # use default build directory location
+            [ -f ${defaultPath} ] && eval ${program}=${defaultPath}
+        fi
+    fi
+    eval using=\${${program}}
+    if [ "${using}" = "" ]; then
+        echo Couldn\'t locate ${appName}, set CCNX_HOME or PARC_HOME to its location.
+        exit 1
+    fi
+    echo Using ${program}=${using}
+done
+
+ATHENACTL="${ATHENACTL} -p ${PASSWORD} -f ${KEYFILE}"
 
 #
 # Setup a key for athenactl
 #
-${ATHENADIR}/bin/parc_publickey -c ${KEYFILE} ${PASSWORD} athena 1024 365
+${PARC_PUBLICKEY} -c ${KEYFILE} ${PASSWORD} athena 1024 365
 
 #
 # Start the default Athena forwarder instance listening on localhost
@@ -144,7 +175,7 @@ ${ATHENACTL} -a tcp://localhost:${LASTPORT} add route athena${FIRSTPORT} ${URI}
 #
 # Start a tutorial server on the last instance
 #
-echo starting tutorial_Server on port ${METIS_PORT}
+echo starting tutorial_Server on port ${LASTPORT}
 export METIS_PORT=${LASTPORT}
 ${TUTORIAL_SERVER} /tmp
 wait
