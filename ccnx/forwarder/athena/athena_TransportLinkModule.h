@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #ifndef libathena_TransportLinkModule_h
 #define libathena_TransportLinkModule_h
@@ -216,58 +216,15 @@ void athenaTransportLinkModule_SetAddLinkCallback(AthenaTransportLinkModule *ath
                                                   AthenaTransportLinkModule_AddLinkCallbackContext addLinkContext);
 
 /**
- * @abstract initialize TCP specific link modules
- * @discussion
- *
- * @return list of modules
- *
- * Example:
- * @code
- * {
- *
- * }
- * @endcode
- */
-PARCArrayList *athenaTransportLinkModuleTCP_Init();
-//static void athenaTransportLinkModuleTCP_Fini();
-
-/**
- * @abstract initialize UDP specific link modules
- * @discussion
- *
- * @return list of modules
- *
- * Example:
- * @code
- * {
- *
- * }
- * @endcode
- */
-PARCArrayList *athenaTransportLinkModuleUDP_Init();
-//static void athenaTransportLinkModuleUDP_Fini();
-
-/**
- * @abstract initialize ethernet (ETH) specific link modules
- * @discussion
- *
- * @return list of modules
- *
- * Example:
- * @code
- * {
- *
- * }
- * @endcode
- */
-PARCArrayList *athenaTransportLinkModuleETH_Init();
-//static void athenaTransportLinkModuleETH_Fini();
-
-/**
  * Set the logging level for a module
  *
  * @param athenaTransportLinkModule instance
  * @param level to set logging to (see PARCLog)
  */
 void athenaTransportLinkModule_SetLogLevel(AthenaTransportLinkModule *athenaTransportLinkModule, const PARCLogLevel level);
+
+PARCBuffer *athenaTransportLinkModule_GetMessageBuffer(CCNxMetaMessage *message);
+
+CCNxCodecNetworkBufferIoVec *athenaTransportLinkModule_GetMessageIoVector(CCNxMetaMessage *message);
+
 #endif // libathena_TransportLinkModule_h
