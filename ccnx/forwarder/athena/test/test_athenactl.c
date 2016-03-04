@@ -38,8 +38,7 @@
 
 #include <parc/algol/parc_SafeMemory.h>
 #include <parc/security/parc_Security.h>
-#include <parc/security/parc_PublicKeySignerPkcs12Store.h>
-#include <ccnx/common/ccnx_KeystoreUtilities.h>
+#include <parc/security/parc_Pkcs12KeyStore.h>
 
 LONGBOW_TEST_RUNNER(athenactl)
 {
@@ -82,8 +81,8 @@ _create_identity()
     char *subjectName = "test_athenactl";
 
     bool success =
-        parcPublicKeySignerPkcs12Store_CreateFile("my_keystore", "my_keystore_password", subjectName, keyLength, validityDays);
-    assertTrue(success, "parcPublicKeySignerPkcs12Store_CreateFile('my_keystore', 'my_keystore_password') failed.");
+        parcPkcs12KeyStore_CreateFile("my_keystore", "my_keystore_password", subjectName, keyLength, validityDays);
+    assertTrue(success, "parcPkcs12KeyStore_CreateFile('my_keystore', 'my_keystore_password') failed.");
 
     PARCIdentityFile *identityFile = parcIdentityFile_Create("my_keystore", "my_keystore_password");
     PARCIdentity *identity = parcIdentity_Create(identityFile, PARCIdentityFileAsPARCIdentity);
