@@ -328,7 +328,7 @@ _athenaTransportLinkAdapter_AddLink(AthenaTransportLinkAdapter *athenaTransportL
         if (linkId != -1) {
             parcArrayList_Set(athenaTransportLinkAdapter->instanceList, linkId, newTransportLink);
         } else {
-            result = parcArrayList_Add(athenaTransportLinkAdapter->instanceList, newTransportLink);
+            bool result = parcArrayList_Add(athenaTransportLinkAdapter->instanceList, newTransportLink);
             assertTrue(result, "parcArrayList_Add failed to add new link instance");
         }
     }
