@@ -187,12 +187,10 @@ _athenaLRUContentStoreEntry_Display(const _AthenaLRUContentStoreEntry *entry, in
 }
 
 static
-parcObject_ImplementAcquire(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry
-                            );
+parcObject_ImplementAcquire(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry);
 
 static
-parcObject_ImplementRelease(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry
-                            );
+parcObject_ImplementRelease(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry);
 
 // _destroy, _copy, _toString, _equals, _compare, _hashCode, _toJSON
 parcObject_ExtendPARCObject(_AthenaLRUContentStoreEntry,
