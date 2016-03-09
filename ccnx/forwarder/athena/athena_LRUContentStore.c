@@ -51,6 +51,8 @@
 #include <ccnx/forwarder/athena/athena_ContentStore.h>
 #include <ccnx/forwarder/athena/athena_LRUContentStore.h>
 
+#include <sys/queue.h>
+
 
 typedef struct athena_lrucontentstore_entry _AthenaLRUContentStoreEntry;
 
@@ -351,25 +353,15 @@ _athenaLRUContentStoreEntry_ReleaseAllInLRU(AthenaLRUContentStore *impl)
 {
     _AthenaLRUContentStoreEntry *entry = impl->lruHead;
     while (entry != NULL) {
-        _AthenaLRUContentStoreEntry *prev = entry->prev;
+        _AthenaLRUContentStoreEntry *next = entry->next;
         _athenaLRUContentStoreEntry_Release(&entry);
-        entry = prev;
+        entry = next;
     }
 }
 
-
 static void
-_athenaLRUContentStore_Finalize(AthenaLRUContentStore **instancePtr)
+_athenaLRUContentStore_ReleaseAllData(AthenaLRUContentStore *impl)
 {
-    assertNotNull(instancePtr, "Parameter must be a non-null pointer to a AthenaLRUContentStore pointer.");
-
-    AthenaLRUContentStore *impl = *instancePtr;
-
-    //athenaLRUContentStore_OptionalAssertValid(instance);
-
-    //printf("LRU CONTENT STORE FINALIZE\n");
-    //athenaLRUContentStore_Display((const AthenaLRUContentStore *) impl, 0);
-
     if (impl->tableByName) {
         parcHashMap_Release(&impl->tableByName);
     }
@@ -388,7 +380,25 @@ _athenaLRUContentStore_Finalize(AthenaLRUContentStore **instancePtr)
     }
 
     _athenaLRUContentStoreEntry_ReleaseAllInLRU(impl);
+
+    impl->currentSizeInBytes = 0;
 }
+
+static void
+_athenaLRUContentStore_Finalize(AthenaLRUContentStore **instancePtr)
+{
+    assertNotNull(instancePtr, "Parameter must be a non-null pointer to a AthenaLRUContentStore pointer.");
+
+    AthenaLRUContentStore *impl = *instancePtr;
+
+    //athenaLRUContentStore_OptionalAssertValid(instance);
+
+    //printf("LRU CONTENT STORE FINALIZE\n");
+    //athenaLRUContentStore_Display((const AthenaLRUContentStore *) impl, 0);
+
+   _athenaLRUContentStore_ReleaseAllData(impl);
+}
+
 
 parcObject_ImplementAcquire(athenaLRUContentStore, AthenaLRUContentStore);
 
@@ -409,6 +419,42 @@ athenaLRUContentStore_AssertValid(const AthenaLRUContentStore *instance)
                "AthenaLRUContentStore is not valid.");
 }
 
+static unsigned int
+_calculateNumberOfInitialBucketsBasedOnCapacity(size_t capacityInBytes)
+{
+    // **********************************************************************
+    // Note!! This is a temporary workaround until PARCHashMap implements
+    // load factor resizing.
+    // **********************************************************************
+
+    // We're using the very rough heuristic of allowing up to 100
+    // ContentObjects in each bucket of the HashMap, assuming each
+    // ContentObject is 1KB in size and the hash function works well...
+
+    return capacityInBytes / (100 * 1024);
+}
+
+static void
+_athenaLRUContentStore_initializeIndexes(AthenaLRUContentStore *impl, size_t capacityInBytes)
+{
+    //
+    // NOTE: Calculating the number of buckets for the hashmaps is a temporary workaround for
+    //       PARCHashMap not yet implementing internal resizing. See BugzId: 3950
+    //
+
+    unsigned int numBuckets = _calculateNumberOfInitialBucketsBasedOnCapacity(capacityInBytes);
+    impl->tableByName = parcHashMap_CreateCapacity(numBuckets);
+    impl->tableByNameAndKeyId = parcHashMap_CreateCapacity(numBuckets);
+    impl->tableByNameAndObjectHash = parcHashMap_CreateCapacity(numBuckets);
+
+    impl->listByRecommendedCacheTime = parcSortedList_CreateCompare((PARCSortedListEntryCompareFunction) _compareByRecommendedCacheTime);
+    impl->listByExpiryTime = parcSortedList_CreateCompare((PARCSortedListEntryCompareFunction) _compareByExpiryTime);
+
+    impl->lruHead = NULL;
+    impl->lruTail = NULL;
+
+    impl->currentSizeInBytes = 0;
+}
 
 static AthenaContentStoreImplementation *
 _athenaLRUContentStore_Create(AthenaContentStoreConfig *storeConfig)
@@ -417,23 +463,15 @@ _athenaLRUContentStore_Create(AthenaContentStoreConfig *storeConfig)
     AthenaLRUContentStore *result = parcObject_CreateAndClearInstance(AthenaLRUContentStore);
     if (result != NULL) {
         result->wallClock = parcClock_Wallclock();
-        result->tableByName = parcHashMap_Create();
-        result->tableByNameAndKeyId = parcHashMap_Create();
-        result->tableByNameAndObjectHash = parcHashMap_Create();
-
-        result->listByRecommendedCacheTime = parcSortedList_CreateCompare((PARCSortedListEntryCompareFunction) _compareByRecommendedCacheTime);
-        result->listByExpiryTime = parcSortedList_CreateCompare((PARCSortedListEntryCompareFunction) _compareByExpiryTime);
-
-        result->lruHead = NULL;
-        result->lruTail = NULL;
-
-        result->currentSizeInBytes = 0;
 
         if (config != NULL) {
             result->maxSizeInBytes = config->capacityInMB * (1024 * 1024); // MB to bytes
         } else {
             result->maxSizeInBytes = 10 * (1024 * 1024); // 10 MB default
         }
+
+        _athenaLRUContentStore_initializeIndexes(result, result->maxSizeInBytes);
+
     }
 
     return (AthenaContentStoreImplementation *) result;
@@ -444,7 +482,6 @@ _athenaLRUContentStore_Release(AthenaContentStoreImplementation **instance)
 {
     parcObject_Release((PARCObject **) instance);
 }
-
 
 void
 athenaLRUContentStore_Display(const AthenaContentStoreImplementation *store, int indentation)
@@ -460,7 +497,7 @@ athenaLRUContentStore_Display(const AthenaContentStoreImplementation *store, int
     parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInName+HashIndex = %zu", parcHashMap_Size(impl->tableByNameAndObjectHash));
 
     parcDisplayIndented_PrintLine(indentation + 4, "LRU = {");
-    _AthenaLRUContentStoreEntry *entry = impl->lruTail; // Dump entries, oldest to newest
+    _AthenaLRUContentStoreEntry *entry = impl->lruHead; // Dump entries, head to tail
     while (entry) {
         _athenaLRUContentStoreEntry_Display(entry, indentation + 8);
         entry = entry->next;
@@ -492,18 +529,19 @@ athenaLRUContentStore_ToString(const AthenaLRUContentStore *instance)
 static void
 _addContentStoreEntryToLRUHead(AthenaLRUContentStore *impl, _AthenaLRUContentStoreEntry *entry)
 {
-    trapUnexpectedStateIf(impl->lruHead != NULL && impl->lruHead->next != NULL, "Unexpected LRU pointer configuration. Next should be NULL.");
+    trapUnexpectedStateIf(impl->lruHead != NULL && impl->lruHead->prev != NULL, "Unexpected LRU pointer configuration. Next should be NULL.");
 
     if (impl->lruTail == NULL) {
         impl->lruTail = entry;
     }
 
-    entry->next = NULL;
-    entry->prev = impl->lruHead; // Could be NULL
-
     if (impl->lruHead != NULL) {
-        impl->lruHead->next = entry;
+        impl->lruHead->prev = entry;
     }
+
+    entry->next = impl->lruHead;
+    entry->prev = NULL;
+
     impl->lruHead = entry;
 }
 
@@ -528,17 +566,19 @@ _moveContentStoreEntryToLRUHead(AthenaLRUContentStore *impl, _AthenaLRUContentSt
     }
 
     if (impl->lruTail == entry) {
-        impl->lruTail = entry->next;
+        impl->lruTail = entry->prev;
+        impl->lruTail->next = NULL;
     }
 
     if (impl->lruHead == NULL) {
-        impl->lruHead = entry;
+        entry->next = NULL;
+        entry->prev = NULL;
     } else {
-        impl->lruHead->next = entry;
+        impl->lruHead->prev = entry;
+        entry->next = impl->lruHead;
     }
-    entry->prev = impl->lruHead;
-    entry->next = NULL;
     impl->lruHead = entry;
+    entry->prev = NULL;
 }
 
 static _AthenaLRUContentStoreEntry *
@@ -855,7 +895,15 @@ _athenaLRUContentStore_SetCapacity(AthenaContentStoreImplementation *store, size
     AthenaLRUContentStore *impl = (AthenaLRUContentStore *) store;
     impl->maxSizeInBytes = maxSizeInMB * (1024 * 1024);
 
-    // TODO: Trim existing entries to fit into the new limit, if necessary.
+    // TODO: Trim existing entries to fit into the new limit, if necessary
+
+    _athenaLRUContentStore_ReleaseAllData(impl);
+
+    //
+    // NOTE: Calculating the number of buckets for the hashmaps is a temporary workaround for
+    //       PARCHashMap not yet implementing internal resizing. See BugzId: 3950
+    //
+    _athenaLRUContentStore_initializeIndexes(impl, impl->maxSizeInBytes);
 
     return true;
 }
