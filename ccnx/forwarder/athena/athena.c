@@ -267,7 +267,10 @@ _processContentObject(Athena *athena, CCNxContentObject *contentObject, PARCBitV
             //
             // *   (2) Add to the Content Store
             //
-            athenaContentStore_PutContentObject(athena->athenaContentStore, contentObject);
+            if (athena->athenaContentStore != NULL
+                && athenaContentStore_GetCapacity(athena->athenaContentStore) > 0) {
+                athenaContentStore_PutContentObject(athena->athenaContentStore, contentObject);
+            }
 
             //
             // *   (3) Reverse path forward it via PIT entries
