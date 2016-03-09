@@ -760,6 +760,11 @@ _athenaLRUContentStore_PutContentObject(AthenaContentStoreImplementation *store,
 {
     AthenaLRUContentStore *impl = (AthenaLRUContentStore *) store;
 
+    // If there's no capacity at all, just return now.
+    if (impl->maxSizeInBytes <= 0) {
+        return false;
+    }
+
     // Check to see if the ContentObject is expired. If so, don't bother to cache it.
     if (ccnxContentObject_HasExpiryTime(content)) {
         if (ccnxContentObject_GetExpiryTime(content) <= parcClock_GetTime(impl->wallClock)) {
