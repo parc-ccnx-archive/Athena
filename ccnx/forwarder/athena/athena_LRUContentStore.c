@@ -420,7 +420,7 @@ _calculateNumberOfInitialBucketsBasedOnCapacityInBytes(size_t capacityInBytes)
 {
     // **********************************************************************
     // Note!! This is a temporary workaround until PARCHashMap implements
-    // load factor resizing.
+    // load factor resizing.  See BugzId: 3950
     // **********************************************************************
 
     // We're using the very rough heuristic of allowing up to 100
@@ -584,6 +584,7 @@ _moveContentStoreEntryToLRUHead(AthenaLRUContentStore *impl, _AthenaLRUContentSt
 static _AthenaLRUContentStoreEntry *
 _getLeastUsedFromLRU(AthenaLRUContentStore *impl)
 {
+    // The TAIL of the LRU is the oldest, least used object.
     return impl->lruTail;
 }
 
@@ -702,6 +703,7 @@ _athenaLRUContentStore_PutLRUContentStoreEntry(AthenaContentStoreImplementation 
     if (isEnoughRoomInStore) {
         _AthenaLRUContentStoreEntry *newEntry = _athenaLRUContentStoreEntry_Acquire(entry);
 
+        // New entries go to the HEAD of the LRU.
         _addContentStoreEntryToLRUHead(impl, newEntry);
 
         // DO NOT RELEASE the newEntry after adding it to the containers. We will let the LRU be responsible for the
