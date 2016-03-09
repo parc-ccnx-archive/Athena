@@ -30,28 +30,16 @@
  * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 
-#include <config.h>
-
 #include <ccnx/forwarder/athena/athena.h>
-#include <parc/algol/parc_Object.h>
 #include <parc/algol/parc_DisplayIndented.h>
 
-#include <parc/algol/parc_Memory.h>
-
-#include <parc/algol/parc_JSON.h>
-#include <parc/algol/parc_HashCode.h>
 #include <parc/algol/parc_HashMap.h>
-#include <parc/algol/parc_Deque.h>
 #include <parc/algol/parc_SortedList.h>
 #include <parc/algol/parc_Clock.h>
 
-#include <ccnx/common/ccnx_NameSegment.h>
 #include <ccnx/common/ccnx_NameSegmentNumber.h>
 
-#include <ccnx/forwarder/athena/athena_ContentStore.h>
 #include <ccnx/forwarder/athena/athena_LRUContentStore.h>
-
-#include <sys/queue.h>
 
 
 typedef struct athena_lrucontentstore_entry _AthenaLRUContentStoreEntry;
@@ -305,11 +293,11 @@ _athenaLRUContentStore_RemoveContentStoreEntryFromLRU(AthenaLRUContentStore *imp
     }
 
     if (impl->lruHead == storeEntry) {
-        impl->lruHead = storeEntry->prev;   // Could be NULL
+        impl->lruHead = storeEntry->next;   // Could be NULL
     }
 
     if (impl->lruTail == storeEntry) {
-        impl->lruTail = storeEntry->next;   // Could be NULL;
+        impl->lruTail = storeEntry->prev;   // Could be NULL;
     }
 
     _athenaLRUContentStoreEntry_Release(&storeEntry);
@@ -381,7 +369,10 @@ _athenaLRUContentStore_ReleaseAllData(AthenaLRUContentStore *impl)
 
     _athenaLRUContentStoreEntry_ReleaseAllInLRU(impl);
 
+    impl->lruHead = NULL;
+    impl->lruTail = NULL;
     impl->currentSizeInBytes = 0;
+    impl->numEntries = 0;
 }
 
 static void

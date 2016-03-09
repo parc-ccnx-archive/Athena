@@ -28,24 +28,13 @@
  * @author Alan Walendowski, Palo Alto Research Center (Xerox PARC)
  * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#include <config.h>
 #include <stdio.h>
-#include <sys/queue.h>
 
 #include "../athena_LRUContentStore.c"
 
 #include <LongBow/testing.h>
-#include <LongBow/debugging.h>
-#include <LongBow/runtime.h>
 
-#include <parc/algol/parc_Memory.h>
 #include <parc/algol/parc_SafeMemory.h>
-#include <parc/algol/parc_DisplayIndented.h>
-
-#include <parc/testing/parc_MemoryTesting.h>
-#include <parc/testing/parc_ObjectTesting.h>
-
-#include <ccnx/common/ccnx_NameSegmentNumber.h>
 
 
 static AthenaLRUContentStore *
@@ -545,17 +534,17 @@ LONGBOW_TEST_CASE(Local, _getLeastUsedFromLRU)
 
     athenaLRUContentStore_Display(impl, 2);
 
-    _AthenaLRUContentStoreEntry *entry1 = _getLeastUsedFromLRU(impl);
-    assertTrue(ccnxContentObject_Equals(entry1->contentObject, contentObject1), "Expected to retrieve contentObject1");
-    _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry1);
+    _AthenaLRUContentStoreEntry *entry = _getLeastUsedFromLRU(impl);
+    assertTrue(ccnxContentObject_Equals(entry->contentObject, contentObject1), "Expected to retrieve contentObject1");
+    _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry);
 
-    _AthenaLRUContentStoreEntry *entry2 = _getLeastUsedFromLRU(impl);
-    assertTrue(ccnxContentObject_Equals(entry2->contentObject, contentObject2), "Expected to retrieve contentObject1");
-    _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry2);
+    entry = _getLeastUsedFromLRU(impl);
+    assertTrue(ccnxContentObject_Equals(entry->contentObject, contentObject2), "Expected to retrieve contentObject2");
+    _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry);
 
-    _AthenaLRUContentStoreEntry *entry3 = _getLeastUsedFromLRU(impl);
-    assertTrue(ccnxContentObject_Equals(entry3->contentObject, contentObject3), "Expected to retrieve contentObject1");
-    _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry3);
+     entry = _getLeastUsedFromLRU(impl);
+    assertTrue(ccnxContentObject_Equals(entry->contentObject, contentObject3), "Expected to retrieve contentObject3");
+    _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry);
 
     ccnxContentObject_Release(&contentObject1);
     ccnxContentObject_Release(&contentObject2);
@@ -1165,7 +1154,7 @@ LONGBOW_TEST_CASE(Local, capacitySetWithExistingContent)
 
     size_t test = _athenaLRUContentStore_GetCapacity(impl);
     assertTrue(test == newSize, "expected the same size capacity as was set");
-/*
+
     // Put stuff in again.
     for (int i = 0; i < 7; i++) {
         CCNxContentObject *content = _createContentObject("lci:/this/is/content", i, payload);
@@ -1177,7 +1166,7 @@ LONGBOW_TEST_CASE(Local, capacitySetWithExistingContent)
     }
 
     assertTrue(impl->numEntries == 7, "Expected 17 entries");
-*/
+
     _athenaLRUContentStore_Release((AthenaContentStoreImplementation *) &impl);
     parcBuffer_Release(&payload);
 }
@@ -1187,45 +1176,45 @@ LONGBOW_TEST_CASE(Local, capacitySetWithExistingContent)
 
 LONGBOW_TEST_FIXTURE(Local)
 {
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStoreEntry_CreateRelease);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PutContentObject);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PutManyContentObjects);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByName);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndKeyId);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndObjectHash);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_RemoveMatch);
-    ////LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PurgeContentStoreEntry);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStoreEntry_Display);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStoreEntry_CreateRelease);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PutContentObject);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PutManyContentObjects);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByName);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndKeyId);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndObjectHash);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_RemoveMatch);
+    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PurgeContentStoreEntry);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStoreEntry_Display);
 
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PutLRUContentStoreEntry);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_PutLRUContentStoreEntry);
 
     LONGBOW_RUN_TEST_CASE(Local, _moveContentStoreEntryToLRUHead);
-    //LONGBOW_RUN_TEST_CASE(Local, _getLeastUsedFromLRU);
+    LONGBOW_RUN_TEST_CASE(Local, _getLeastUsedFromLRU);
 
-    //LONGBOW_RUN_TEST_CASE(Local, _compareByExpiryTime);
-    //LONGBOW_RUN_TEST_CASE(Local, _compareByRecommendedCacheTime);
+    LONGBOW_RUN_TEST_CASE(Local, _compareByExpiryTime);
+    LONGBOW_RUN_TEST_CASE(Local, _compareByRecommendedCacheTime);
 
-    //LONGBOW_RUN_TEST_CASE(Local, putWithExpiryTime);
-    //LONGBOW_RUN_TEST_CASE(Local, putWithExpiryTime_Expired);
+    LONGBOW_RUN_TEST_CASE(Local, putWithExpiryTime);
+    LONGBOW_RUN_TEST_CASE(Local, putWithExpiryTime_Expired);
 
-    //LONGBOW_RUN_TEST_CASE(Local, putContentAndEnforceCapacity);
-    //LONGBOW_RUN_TEST_CASE(Local, putTooBig);
-    //LONGBOW_RUN_TEST_CASE(Local, putContentAndExpireByExpiryTime);
+    LONGBOW_RUN_TEST_CASE(Local, putContentAndEnforceCapacity);
+    LONGBOW_RUN_TEST_CASE(Local, putTooBig);
+    LONGBOW_RUN_TEST_CASE(Local, putContentAndExpireByExpiryTime);
 
-    //LONGBOW_RUN_TEST_CASE(Loca, _createHashableKey_Name);
-    //LONGBOW_RUN_TEST_CASE(Loca, _createHashableKey_NameAndKeyId);
-    //LONGBOW_RUN_TEST_CASE(Loca, _createHashableKey_NameAndObjectHash);
+    LONGBOW_RUN_TEST_CASE(Loca, _createHashableKey_Name);
+    LONGBOW_RUN_TEST_CASE(Loca, _createHashableKey_NameAndKeyId);
+    LONGBOW_RUN_TEST_CASE(Loca, _createHashableKey_NameAndObjectHash);
 
-    //LONGBOW_RUN_TEST_CASE(Local, getMatch_Expired);
+    LONGBOW_RUN_TEST_CASE(Local, getMatch_Expired);
 
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_ProcessMessage_StatHits);
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_ProcessMessage_StatSize);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_ProcessMessage_StatHits);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_ProcessMessage_StatSize);
 
-    //LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_ReleaseAllData);
+    LONGBOW_RUN_TEST_CASE(Local, _athenaLRUContentStore_ReleaseAllData);
 
-    //LONGBOW_RUN_TEST_CASE(Local, capacitySetGet);
+    LONGBOW_RUN_TEST_CASE(Local, capacitySetGet);
 
-    //LONGBOW_RUN_TEST_CASE(Local, capacitySetWithExistingContent);
+    LONGBOW_RUN_TEST_CASE(Local, capacitySetWithExistingContent);
 }
 
 LONGBOW_TEST_FIXTURE_SETUP(Local)
