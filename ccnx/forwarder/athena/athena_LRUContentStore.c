@@ -30,28 +30,16 @@
  * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 
-#include <config.h>
-
 #include <ccnx/forwarder/athena/athena.h>
-#include <parc/algol/parc_Object.h>
 #include <parc/algol/parc_DisplayIndented.h>
 
-#include <parc/algol/parc_Memory.h>
-
-#include <parc/algol/parc_JSON.h>
-#include <parc/algol/parc_HashCode.h>
 #include <parc/algol/parc_HashMap.h>
-#include <parc/algol/parc_Deque.h>
 #include <parc/algol/parc_SortedList.h>
 #include <parc/algol/parc_Clock.h>
 
-#include <ccnx/common/ccnx_NameSegment.h>
 #include <ccnx/common/ccnx_NameSegmentNumber.h>
 
-#include <ccnx/forwarder/athena/athena_ContentStore.h>
 #include <ccnx/forwarder/athena/athena_LRUContentStore.h>
-
-#include <sys/queue.h>
 
 
 typedef struct athena_lrucontentstore_entry _AthenaLRUContentStoreEntry;
@@ -305,11 +293,11 @@ _athenaLRUContentStore_RemoveContentStoreEntryFromLRU(AthenaLRUContentStore *imp
     }
 
     if (impl->lruHead == storeEntry) {
-        impl->lruHead = storeEntry->prev;   // Could be NULL
+        impl->lruHead = storeEntry->next;   // Could be NULL
     }
 
     if (impl->lruTail == storeEntry) {
-        impl->lruTail = storeEntry->next;   // Could be NULL;
+        impl->lruTail = storeEntry->prev;   // Could be NULL;
     }
 
     _athenaLRUContentStoreEntry_Release(&storeEntry);
@@ -381,7 +369,10 @@ _athenaLRUContentStore_ReleaseAllData(AthenaLRUContentStore *impl)
 
     _athenaLRUContentStoreEntry_ReleaseAllInLRU(impl);
 
+    impl->lruHead = NULL;
+    impl->lruTail = NULL;
     impl->currentSizeInBytes = 0;
+    impl->numEntries = 0;
 }
 
 static void
@@ -390,11 +381,6 @@ _athenaLRUContentStore_Finalize(AthenaLRUContentStore **instancePtr)
     assertNotNull(instancePtr, "Parameter must be a non-null pointer to a AthenaLRUContentStore pointer.");
 
     AthenaLRUContentStore *impl = *instancePtr;
-
-    //athenaLRUContentStore_OptionalAssertValid(instance);
-
-    //printf("LRU CONTENT STORE FINALIZE\n");
-    //athenaLRUContentStore_Display((const AthenaLRUContentStore *) impl, 0);
 
    _athenaLRUContentStore_ReleaseAllData(impl);
 }
@@ -420,7 +406,7 @@ athenaLRUContentStore_AssertValid(const AthenaLRUContentStore *instance)
 }
 
 static unsigned int
-_calculateNumberOfInitialBucketsBasedOnCapacity(size_t capacityInBytes)
+_calculateNumberOfInitialBucketsBasedOnCapacityInBytes(size_t capacityInBytes)
 {
     // **********************************************************************
     // Note!! This is a temporary workaround until PARCHashMap implements
@@ -431,7 +417,9 @@ _calculateNumberOfInitialBucketsBasedOnCapacity(size_t capacityInBytes)
     // ContentObjects in each bucket of the HashMap, assuming each
     // ContentObject is 1KB in size and the hash function works well...
 
-    return capacityInBytes / (100 * 1024);
+    unsigned int parcHashMapDefaultBuckets = 43; // THIS IS TEMPORARY UNTIL PARCHashMap implements load factor
+    unsigned int numBuckets = capacityInBytes / (100 * 1024); // 100 1K objects per bucket
+    return numBuckets < parcHashMapDefaultBuckets ? parcHashMapDefaultBuckets : numBuckets;
 }
 
 static void
@@ -441,8 +429,7 @@ _athenaLRUContentStore_initializeIndexes(AthenaLRUContentStore *impl, size_t cap
     // NOTE: Calculating the number of buckets for the hashmaps is a temporary workaround for
     //       PARCHashMap not yet implementing internal resizing. See BugzId: 3950
     //
-
-    unsigned int numBuckets = _calculateNumberOfInitialBucketsBasedOnCapacity(capacityInBytes);
+    unsigned int numBuckets = _calculateNumberOfInitialBucketsBasedOnCapacityInBytes(capacityInBytes);
     impl->tableByName = parcHashMap_CreateCapacity(numBuckets);
     impl->tableByNameAndKeyId = parcHashMap_CreateCapacity(numBuckets);
     impl->tableByNameAndObjectHash = parcHashMap_CreateCapacity(numBuckets);
