@@ -542,7 +542,7 @@ LONGBOW_TEST_CASE(Local, _getLeastUsedFromLRU)
     assertTrue(ccnxContentObject_Equals(entry->contentObject, contentObject2), "Expected to retrieve contentObject2");
     _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry);
 
-     entry = _getLeastUsedFromLRU(impl);
+    entry = _getLeastUsedFromLRU(impl);
     assertTrue(ccnxContentObject_Equals(entry->contentObject, contentObject3), "Expected to retrieve contentObject3");
     _athenaLRUContentStore_PurgeContentStoreEntry(impl, entry);
 

@@ -109,7 +109,8 @@ _createHashableKey(const CCNxName *name, const PARCBuffer *keyId, const PARCBuff
 }
 
 
-static void _athenaLRUContentStore_PurgeContentStoreEntry(AthenaLRUContentStore *store, _AthenaLRUContentStoreEntry *storeEntry);
+static void _athenaLRUContentStore_PurgeContentStoreEntry(AthenaLRUContentStore *store,
+                                                          _AthenaLRUContentStoreEntry *storeEntry);
 
 /***************************************************************************************************
 *   Begin AthenaLRUContentStoreEntry definition.
@@ -170,11 +171,15 @@ _athenaLRUContentStoreEntry_Display(const _AthenaLRUContentStoreEntry *entry, in
                                   entry->contentObject, entry->sizeInBytes);
     parcDisplayIndented_PrintLine(childIndentation, "Name: %p [%s]", name, nameString);
     if (entry->hasExpiryTime) {
-        parcDisplayIndented_PrintLine(childIndentation, "ExpiryTime: [%" PRIu64  "]", entry->expiryTime);
+        parcDisplayIndented_PrintLine(childIndentation, "ExpiryTime: [%"
+                                      PRIu64
+                                      "]", entry->expiryTime);
     }
 
     if (entry->hasRecommendedCacheTime) {
-        parcDisplayIndented_PrintLine(childIndentation, "RecommendedCacheTime: [%" PRIu64  "]", entry->recommendedCacheTime);
+        parcDisplayIndented_PrintLine(childIndentation, "RecommendedCacheTime: [%"
+                                      PRIu64
+                                      "]", entry->recommendedCacheTime);
     }
 
     parcDisplayIndented_PrintLine(childIndentation, "}");
@@ -182,10 +187,12 @@ _athenaLRUContentStoreEntry_Display(const _AthenaLRUContentStoreEntry *entry, in
 }
 
 static
-parcObject_ImplementAcquire(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry);
+parcObject_ImplementAcquire(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry
+                            );
 
 static
-parcObject_ImplementRelease(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry);
+parcObject_ImplementRelease(_athenaLRUContentStoreEntry, _AthenaLRUContentStoreEntry
+                            );
 
 // _destroy, _copy, _toString, _equals, _compare, _hashCode, _toJSON
 parcObject_ExtendPARCObject(_AthenaLRUContentStoreEntry,
@@ -195,7 +202,7 @@ parcObject_ExtendPARCObject(_AthenaLRUContentStoreEntry,
                             NULL, // equals,
                             NULL, // compare
                             NULL, // hashCode
-                            NULL  // toJSON
+                            NULL // toJSON
                             );
 
 
@@ -276,13 +283,13 @@ _compareByRecommendedCacheTime(const _AthenaLRUContentStoreEntry *entry1, const 
 }
 
 
-
 /***************************************************************************************************
 *   End AthenaLRUContentStoreEntry definition.
 ***************************************************************************************************/
 
 static void
-_athenaLRUContentStore_RemoveContentStoreEntryFromLRU(AthenaLRUContentStore *impl, _AthenaLRUContentStoreEntry *storeEntry)
+_athenaLRUContentStore_RemoveContentStoreEntryFromLRU(AthenaLRUContentStore *impl,
+                                                      _AthenaLRUContentStoreEntry *storeEntry)
 {
     if (storeEntry->next != NULL) {
         storeEntry->next->prev = storeEntry->prev;
@@ -311,13 +318,15 @@ _athenaLRUContentStore_PurgeContentStoreEntry(AthenaLRUContentStore *impl, _Athe
     parcObject_Release((PARCObject **) &nameKey);
 
     if (storeEntry->hasKeyId) {
-        PARCObject *nameAndKeyIdKey = _createHashableKey(ccnxContentObject_GetName(storeEntry->contentObject), storeEntry->keyId, NULL);
+        PARCObject *nameAndKeyIdKey = _createHashableKey(ccnxContentObject_GetName(storeEntry->contentObject),
+                                                         storeEntry->keyId, NULL);
         parcHashMap_Remove(impl->tableByNameAndKeyId, nameAndKeyIdKey);
         parcObject_Release((PARCObject **) &nameAndKeyIdKey);
     }
 
     if (storeEntry->hasContentObjectHash) {
-        PARCObject *nameAndContentObjectHashKey = _createHashableKey(ccnxContentObject_GetName(storeEntry->contentObject), NULL, storeEntry->contentObjectHash);
+        PARCObject *nameAndContentObjectHashKey = _createHashableKey(
+            ccnxContentObject_GetName(storeEntry->contentObject), NULL, storeEntry->contentObjectHash);
         parcHashMap_Remove(impl->tableByNameAndObjectHash, nameAndContentObjectHashKey);
         parcObject_Release((PARCObject **) &nameAndContentObjectHashKey);
     }
@@ -382,20 +391,21 @@ _athenaLRUContentStore_Finalize(AthenaLRUContentStore **instancePtr)
 
     AthenaLRUContentStore *impl = *instancePtr;
 
-   _athenaLRUContentStore_ReleaseAllData(impl);
+    _athenaLRUContentStore_ReleaseAllData(impl);
 }
 
 
-parcObject_ImplementAcquire(athenaLRUContentStore, AthenaLRUContentStore);
+parcObject_ImplementAcquire(athenaLRUContentStore, AthenaLRUContentStore
+                            );
 
 parcObject_ExtendPARCObject(AthenaLRUContentStore,
                             _athenaLRUContentStore_Finalize,
-                            NULL,   // Copy
-                            NULL,   // ToString
-                            NULL,   // Equals
-                            NULL,   // compare
-                            NULL,   // hashCode
-                            NULL    // toJSON
+                            NULL, // Copy
+                            NULL, // ToString
+                            NULL, // Equals
+                            NULL, // compare
+                            NULL, // hashCode
+                            NULL // toJSON
                             );
 
 void
@@ -434,7 +444,8 @@ _athenaLRUContentStore_initializeIndexes(AthenaLRUContentStore *impl, size_t cap
     impl->tableByNameAndKeyId = parcHashMap_CreateCapacity(numBuckets);
     impl->tableByNameAndObjectHash = parcHashMap_CreateCapacity(numBuckets);
 
-    impl->listByRecommendedCacheTime = parcSortedList_CreateCompare((PARCSortedListEntryCompareFunction) _compareByRecommendedCacheTime);
+    impl->listByRecommendedCacheTime = parcSortedList_CreateCompare(
+        (PARCSortedListEntryCompareFunction) _compareByRecommendedCacheTime);
     impl->listByExpiryTime = parcSortedList_CreateCompare((PARCSortedListEntryCompareFunction) _compareByExpiryTime);
 
     impl->lruHead = NULL;
@@ -458,7 +469,6 @@ _athenaLRUContentStore_Create(AthenaContentStoreConfig *storeConfig)
         }
 
         _athenaLRUContentStore_initializeIndexes(result, result->maxSizeInBytes);
-
     }
 
     return (AthenaContentStoreImplementation *) result;
@@ -480,11 +490,13 @@ athenaLRUContentStore_Display(const AthenaContentStoreImplementation *store, int
     parcDisplayIndented_PrintLine(indentation + 4, "sizeInBytes = %zu", impl->currentSizeInBytes);
     parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInStore = %zu", impl->numEntries);
     parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInNameIndex = %zu", parcHashMap_Size(impl->tableByName));
-    parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInName+KeyIndex = %zu", parcHashMap_Size(impl->tableByNameAndKeyId));
-    parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInName+HashIndex = %zu", parcHashMap_Size(impl->tableByNameAndObjectHash));
+    parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInName+KeyIndex = %zu",
+                                  parcHashMap_Size(impl->tableByNameAndKeyId));
+    parcDisplayIndented_PrintLine(indentation + 4, "numEntriesInName+HashIndex = %zu",
+                                  parcHashMap_Size(impl->tableByNameAndObjectHash));
 
     parcDisplayIndented_PrintLine(indentation + 4, "LRU = {");
-    _AthenaLRUContentStoreEntry *entry = impl->lruHead; // Dump entries, head to tail
+    _AthenaLRUContentStoreEntry *entry = impl->lruHead;  // Dump entries, head to tail
     while (entry) {
         _athenaLRUContentStoreEntry_Display(entry, indentation + 8);
         entry = entry->next;
@@ -516,7 +528,8 @@ athenaLRUContentStore_ToString(const AthenaLRUContentStore *instance)
 static void
 _addContentStoreEntryToLRUHead(AthenaLRUContentStore *impl, _AthenaLRUContentStoreEntry *entry)
 {
-    trapUnexpectedStateIf(impl->lruHead != NULL && impl->lruHead->prev != NULL, "Unexpected LRU pointer configuration. Next should be NULL.");
+    trapUnexpectedStateIf(impl->lruHead != NULL && impl->lruHead->prev != NULL,
+                          "Unexpected LRU pointer configuration. Next should be NULL.");
 
     if (impl->lruTail == NULL) {
         impl->lruTail = entry;
@@ -671,7 +684,8 @@ _addEntryToIndexTableIfNotAlreadyInIt(PARCHashMap *indexTable, PARCObject *key, 
 
 
 static bool
-_athenaLRUContentStore_PutLRUContentStoreEntry(AthenaContentStoreImplementation *store, const _AthenaLRUContentStoreEntry *entry)
+_athenaLRUContentStore_PutLRUContentStoreEntry(AthenaContentStoreImplementation *store,
+                                               const _AthenaLRUContentStoreEntry *entry)
 {
     bool result = false;
 
@@ -711,7 +725,8 @@ _athenaLRUContentStore_PutLRUContentStoreEntry(AthenaContentStoreImplementation 
 
         if (newEntry->hasContentObjectHash) {
             PARCObject *nameAndObjectHashKey = _createHashableKey(name, NULL, newEntry->contentObjectHash);
-            existingEntry = _addEntryToIndexTableIfNotAlreadyInIt(impl->tableByNameAndObjectHash, nameAndObjectHashKey, newEntry);
+            existingEntry = _addEntryToIndexTableIfNotAlreadyInIt(impl->tableByNameAndObjectHash, nameAndObjectHashKey,
+                                                                  newEntry);
             parcObject_Release((PARCObject **) &nameAndObjectHashKey);
         }
 
@@ -846,7 +861,8 @@ _athenaLRUContentStore_RemoveMatch(AthenaContentStoreImplementation *store, cons
 
     if (!wasRemoved && keyIdRestriction != NULL) {
         PARCObject *nameAndKeyIdKey = _createHashableKey(name, keyIdRestriction, NULL);
-        _AthenaLRUContentStoreEntry *entry = (_AthenaLRUContentStoreEntry *) parcHashMap_Get(impl->tableByNameAndKeyId, nameAndKeyIdKey);
+        _AthenaLRUContentStoreEntry *entry = (_AthenaLRUContentStoreEntry *) parcHashMap_Get(impl->tableByNameAndKeyId,
+                                                                                             nameAndKeyIdKey);
         parcObject_Release((PARCObject **) &nameAndKeyIdKey);
 
         if (entry != NULL) {
@@ -857,7 +873,8 @@ _athenaLRUContentStore_RemoveMatch(AthenaContentStoreImplementation *store, cons
 
     if (!wasRemoved) {
         PARCObject *nameKey = _createHashableKey(name, NULL, NULL);
-        _AthenaLRUContentStoreEntry *entry = (_AthenaLRUContentStoreEntry *) parcHashMap_Get(impl->tableByName, nameKey);
+        _AthenaLRUContentStoreEntry *entry = (_AthenaLRUContentStoreEntry *) parcHashMap_Get(impl->tableByName,
+                                                                                             nameKey);
         parcObject_Release((PARCObject **) &nameKey);
 
         if (entry != NULL) {
@@ -1042,11 +1059,13 @@ _athenaLRUContentStore_ProcessMessage(AthenaContentStoreImplementation *store, c
         }
 
         if (responsePayload != NULL) {
-            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithDataPayload(ccnxInterest_GetName(interest), responsePayload);
+            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithDataPayload(
+                ccnxInterest_GetName(interest), responsePayload);
 
             result = ccnxMetaMessage_CreateFromContentObject(contentObjectResponse);
             ccnxContentObject_SetExpiryTime(contentObjectResponse,
-                                            parcClock_GetTime(impl->wallClock) + 100); // this response is good for 100 millis
+                                            parcClock_GetTime(impl->wallClock) +
+                                            100); // this response is good for 100 millis
 
             ccnxContentObject_Release(&contentObjectResponse);
             parcBuffer_Release(&responsePayload);
