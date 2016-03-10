@@ -31,6 +31,24 @@ set(ATHENA_SOURCE_FILES
 	${ATHENA_PLATFORM_MODULES}
 	)
 
+set(ATHENA_HEADER_FILES
+    athena.h
+    athena_About.h
+    athena_ContentStore.h
+	athena_ContentStoreInterface.h
+    athena_Control.h
+	athena_Ethernet.h
+    athena_FIB.h
+    athena_InterestControl.h
+    athena_LRUContentStore.h
+    athena_PIT.h
+    athena_TransportLink.h
+    athena_TransportLinkAdapter.h
+    athena_TransportLinkModule.h
+    athenactl.h
+    athenactl_About.h
+	)
+
 set(LIBATHENA_TCP_SOURCE_FILES
     athena_TransportLinkModuleTCP.c
     )
@@ -47,8 +65,6 @@ set(LIBATHENA_TEMPLATE_SOURCE_FILES
     athena_TransportLinkModuleTEMPLATE.c
     )
 
-add_library(athena            STATIC ${ATHENA_SOURCE_FILES})
-
 add_library(athena_TCP.shared SHARED ${LIBATHENA_TCP_SOURCE_FILES})
 set_target_properties(athena_TCP.shared PROPERTIES
   C_STANDARD 99
@@ -62,6 +78,15 @@ set_target_properties(athena_UDP.shared PROPERTIES
   SOVERSION 1
   VERSION 1.0
   OUTPUT_NAME athena_UDP )
+
+add_library(athena STATIC ${ATHENA_SOURCE_FILES} ${ATHENA_HEADER_FILES})
+
+source_group(Sources FILES ${ATHENA_HEADER_FILES})
+source_group(Sources FILES ${ATHENA_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_TCP_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_UDP_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_ETH_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 
 add_library(athena_ETH.shared SHARED ${LIBATHENA_ETH_SOURCE_FILES})
 set_target_properties(athena_ETH.shared PROPERTIES
