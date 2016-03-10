@@ -101,19 +101,56 @@ athenaFIB_Create()
 }
 
 PARCBitVector *
-athenaFIB_Lookup(AthenaFIB *athenaFIB, const CCNxName *ccnxName)
+athenaFIB_Lookup(AthenaFIB *athenaFIB, const CCNxName *ccnxName, PARCBitVector *ingressVector)
 {
     CCNxName *name = ccnxName_Copy(ccnxName);
-    PARCBitVector *result = (PARCBitVector *) parcHashMap_Get(athenaFIB->tableByName, (PARCObject *) name);
+    PARCBitVector *result = NULL;
 
+    // Return the longest prefix match which contains at least one link other than the ingress.
+    // If the result happens to contain the ingress link, make a copy and remove it before returning.
     while ((ccnxName_GetSegmentCount(name) > 0) && (result == NULL)) {
-        name = ccnxName_Trim(name, 1);
         result = (PARCBitVector *) parcHashMap_Get(athenaFIB->tableByName, (PARCObject *) name);
+        if (result) {
+            // If there's an ingressVector provided, return a copy of the result the ingress link cleared.
+            // If that would result in an empty vector, continue looking for a substring match.
+            if (ingressVector != NULL) {
+                assertTrue(parcBitVector_NumberOfBitsSet(ingressVector) <= 1, "Ingress vector with more than one link set");
+                if (parcBitVector_Contains(result, ingressVector)) {
+                    if (parcBitVector_NumberOfBitsSet(result) > 1) {
+                        result = parcBitVector_Copy(result);
+                        parcBitVector_ClearVector(result, ingressVector);
+                    } else { // ingress was only link, keep looking
+                        result = NULL;
+                        name = ccnxName_Trim(name, 1);
+                    }
+                    continue;
+                }
+            }
+            result = parcBitVector_Acquire(result);
+        }
+        name = ccnxName_Trim(name, 1);
     }
     ccnxName_Release(&name);
 
-    if (result == NULL) {
-        result = athenaFIB->defaultRoute;
+    // The default route is outside of the Lookup table, so we need to check it independently
+    // and remove the ingress link if it's in the entry.
+    if ((result == NULL) && (athenaFIB->defaultRoute != NULL)) {
+        if (ingressVector != NULL) {
+	    if (parcBitVector_Contains(athenaFIB->defaultRoute, ingressVector)) {
+                // The ingress link is in the link vector list
+                // either make a copy and remove it, or return an empty egress
+	        if (parcBitVector_NumberOfBitsSet(athenaFIB->defaultRoute) > 1) {
+		    result = parcBitVector_Copy(athenaFIB->defaultRoute);
+		    parcBitVector_ClearVector(result, ingressVector);
+	        } else { // ingress was the only link
+                    result = NULL;
+	        }
+	    } else { // ingress was not in the default route
+                result = parcBitVector_Acquire(athenaFIB->defaultRoute);
+            }
+	} else { // no ingress vector was provided
+            result = parcBitVector_Acquire(athenaFIB->defaultRoute);
+        }
     }
 
     return result;
@@ -175,13 +212,14 @@ athenaFIB_DeleteRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARC
 {
     bool result = false;
 
-    PARCBitVector *linkV = athenaFIB_Lookup(athenaFIB, ccnxName);
+    PARCBitVector *linkV = athenaFIB_Lookup(athenaFIB, ccnxName, NULL);
     if (linkV != NULL) {
         parcBitVector_ClearVector(linkV, ccnxLinkVector);
         if (parcBitVector_NumberOfBitsSet(linkV) == 0) {
             parcHashMap_Remove(athenaFIB->tableByName, (PARCObject *) ccnxName);
         }
         result = true;
+        parcBitVector_Release(&linkV);
     }
 
     return result;

@@ -211,12 +211,10 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
     //         non-local interface so we need not check that here.
     //
     ccnxName = ccnxInterest_GetName(interest);
-    PARCBitVector *egressVector = athenaFIB_Lookup(athena->athenaFIB, ccnxName);
+    PARCBitVector *egressVector = athenaFIB_Lookup(athena->athenaFIB, ccnxName, ingressVector);
 
     if (egressVector != NULL) {
-        // Remove the link the interest came from if it was included in the FIB entry
-        parcBitVector_ClearVector(egressVector, ingressVector);
-        // If no links remain, send a no route interest return message
+        // If no links are in the egress vector the FIB returned, return a no route interest message
         if (parcBitVector_NumberOfBitsSet(egressVector) == 0) {
             CCNxInterestReturn *interestReturn = ccnxInterestReturn_Create(interest, CCNxInterestReturn_ReturnCode_NoRoute);
             PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interestReturn, ingressVector);
@@ -230,6 +228,7 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
                 parcBitVector_Release(&result);
             }
         }
+        parcBitVector_Release(&egressVector);
     } else {
         // No FIB entry found, return a NoRoute interest return and remove the entry from the PIT.
         CCNxInterestReturn *interestReturn = ccnxInterestReturn_Create(interest, CCNxInterestReturn_ReturnCode_NoRoute);
