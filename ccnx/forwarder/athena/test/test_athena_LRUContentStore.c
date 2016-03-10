@@ -1165,7 +1165,7 @@ LONGBOW_TEST_CASE(Local, capacitySetWithExistingContent)
         ccnxContentObject_Release(&content);
     }
 
-    assertTrue(impl->numEntries == 7, "Expected 17 entries");
+    assertTrue(impl->numEntries == 7, "Expected 7 entries");
 
     _athenaLRUContentStore_Release((AthenaContentStoreImplementation *) &impl);
     parcBuffer_Release(&payload);
