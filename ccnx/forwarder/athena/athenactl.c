@@ -125,7 +125,7 @@ _athenactl_AddListener(PARCIdentity *identity, int argc, char **argv)
         return 1;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -162,7 +162,7 @@ _athenactl_AddConnection(PARCIdentity *identity, int argc, char **argv)
         return 1;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -199,7 +199,7 @@ _athenactl_AddLink(PARCIdentity *identity, int argc, char **argv)
         return 1;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -228,7 +228,7 @@ _athenactl_AddRoute(PARCIdentity *identity, int argc, char **argv)
         return 1;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBAddRoute);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBAddRoute);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -261,7 +261,7 @@ _athenactl_RemoveRoute(PARCIdentity *identity, int argc, char **argv)
         return 1;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBRemoveRoute);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBRemoveRoute);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -315,7 +315,7 @@ _athenactl_Add(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_ListLinks(PARCIdentity *identity, int argc, char **argv)
 {
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkList);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkList);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -381,7 +381,7 @@ _athenactl_ListLinks(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_ListFIB(PARCIdentity *identity, int argc, char **argv)
 {
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBList);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBList);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -453,7 +453,7 @@ _athenactl_RemoveLink(PARCIdentity *identity, int argc, char **argv)
         return 1;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkDisconnect);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkDisconnect);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -495,7 +495,7 @@ _athenactl_Remove(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_SetDebug(PARCIdentity *identity, int argc, char **argv)
 {
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Set "/" AthenaCommand_LogLevel "/" AthenaCommand_LogDebug);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Set "/" AthenaCommand_LogLevel "/" AthenaCommand_LogDebug);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -520,7 +520,7 @@ _athenactl_SetLogLevel(PARCIdentity *identity, int argc, char **argv)
 
     char logLevelURI[MAXPATHLEN];
     sprintf(logLevelURI, "%s/level/%s", CCNxNameAthenaCommand_Set, argv[0]);
-    CCNxName *name = ccnxName_CreateFromURI(logLevelURI);
+    CCNxName *name = ccnxName_CreateFromCString(logLevelURI);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -538,7 +538,7 @@ _athenactl_SetLogLevel(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_UnSetDebug(PARCIdentity *identity, int argc, char **argv)
 {
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Set "/" AthenaCommand_LogLevel "/" AthenaCommand_LogInfo);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Set "/" AthenaCommand_LogLevel "/" AthenaCommand_LogInfo);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -593,7 +593,7 @@ _athenactl_UnSet(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_Quit(PARCIdentity *identity, int argc, char **argv)
 {
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Quit);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Quit);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -629,7 +629,7 @@ _athenactl_Run(PARCIdentity *identity, int argc, char **argv)
         linkSpecification = constructedLinkSpecification;
     }
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Run);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Run);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 

@@ -442,7 +442,7 @@ _FIB_Command(Athena *athena, CCNxInterest *interest)
                 parcMemory_Deallocate(&arguments);
                 return responseMessage;
             }
-            CCNxName *prefixName = ccnxName_CreateFromURI(prefix);
+            CCNxName *prefixName = ccnxName_CreateFromCString(prefix);
             if (prefixName == NULL) {
                 responseMessage = _create_response(athena, ccnxName, "Unable to parse prefix %s", prefix);
                 parcMemory_Deallocate(&command);
@@ -547,31 +547,31 @@ athenaInterestControl(Athena *athena, CCNxInterest *interest, PARCBitVector *ing
     CCNxMetaMessage *responseMessage = NULL;
     CCNxName *ccnxName = ccnxInterest_GetName(interest);
 
-    CCNxName *ccnxComponentName = ccnxName_CreateFromURI(CCNxNameAthena_Control);
+    CCNxName *ccnxComponentName = ccnxName_CreateFromCString(CCNxNameAthena_Control);
     if (ccnxName_StartsWith(ccnxName, ccnxComponentName) == true) {
         responseMessage = _Control_Command(athena, interest);
     }
     ccnxName_Release(&ccnxComponentName);
 
-    ccnxComponentName = ccnxName_CreateFromURI(CCNxNameAthena_Link);
+    ccnxComponentName = ccnxName_CreateFromCString(CCNxNameAthena_Link);
     if (ccnxName_StartsWith(ccnxName, ccnxComponentName) == true) {
         responseMessage = _TransportLinkAdapter_Command(athena, interest);
     }
     ccnxName_Release(&ccnxComponentName);
 
-    ccnxComponentName = ccnxName_CreateFromURI(CCNxNameAthena_FIB);
+    ccnxComponentName = ccnxName_CreateFromCString(CCNxNameAthena_FIB);
     if (ccnxName_StartsWith(ccnxName, ccnxComponentName) == true) {
         responseMessage = _FIB_Command(athena, interest);
     }
     ccnxName_Release(&ccnxComponentName);
 
-    ccnxComponentName = ccnxName_CreateFromURI(CCNxNameAthena_PIT);
+    ccnxComponentName = ccnxName_CreateFromCString(CCNxNameAthena_PIT);
     if (ccnxName_StartsWith(ccnxName, ccnxComponentName) == true) {
         responseMessage = _PIT_Command(athena, interest);
     }
     ccnxName_Release(&ccnxComponentName);
 
-    ccnxComponentName = ccnxName_CreateFromURI(CCNxNameAthena_ContentStore);
+    ccnxComponentName = ccnxName_CreateFromCString(CCNxNameAthena_ContentStore);
     if (ccnxName_StartsWith(ccnxName, ccnxComponentName) == true) {
         responseMessage = _ContentStore_Command(athena, interest);
     }

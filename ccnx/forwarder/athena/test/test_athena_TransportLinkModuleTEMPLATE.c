@@ -158,7 +158,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTEMPLATE_SendReceive)
     athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
     // Construct an interest
-    CCNxName *name = ccnxName_CreateFromURI("lci:/foo/bar");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
     CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 

@@ -94,9 +94,9 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     assertNotNull(data, "parcMemory_AllocateAndClear(%lu) returned NULL", sizeof(TestData));
 
     data->testFIB = athenaFIB_Create();
-    data->testName1 = ccnxName_CreateFromURI("lci:/a/b/c");
-    data->testName2 = ccnxName_CreateFromURI("lci:/a/b/a");
-    data->testName3 = ccnxName_CreateFromURI("lci:/");
+    data->testName1 = ccnxName_CreateFromCString("lci:/a/b/c");
+    data->testName2 = ccnxName_CreateFromCString("lci:/a/b/a");
+    data->testName3 = ccnxName_CreateFromCString("lci:/");
     data->testVector1 = parcBitVector_Create();
     parcBitVector_Set(data->testVector1, 0);
     data->testVector2 = parcBitVector_Create();

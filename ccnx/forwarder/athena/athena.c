@@ -100,7 +100,7 @@ athena_Create(size_t contentStoreSizeInMB)
 {
     Athena *athena = parcObject_CreateAndClearInstance(Athena);
 
-    athena->athenaName = ccnxName_CreateFromURI(CCNxNameAthena_Forwarder);
+    athena->athenaName = ccnxName_CreateFromCString(CCNxNameAthena_Forwarder);
     assertNotNull(athena->athenaName, "Failed to create forwarder name (%s)", CCNxNameAthena_Forwarder);
 
     athena->athenaFIB = athenaFIB_Create();

@@ -256,7 +256,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     data->testPIT = athenaPIT_Create();
 
     // Content 1
-    CCNxName *name = ccnxName_CreateFromURI("lci:/test/content");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/test/content");
     PARCBuffer *payload = parcBuffer_WrapCString("Some really hot payload 1");
 
     CCNxContentObject *preSendCO = ccnxContentObject_CreateWithDataPayload(name, payload);
@@ -301,7 +301,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     ccnxName_Release(&name);
 
     // Content 2
-    name = ccnxName_CreateFromURI("lci:/test/content2");
+    name = ccnxName_CreateFromCString("lci:/test/content2");
     payload = parcBuffer_WrapCString("Some really hot payload 2");
     preSendCO = ccnxContentObject_CreateWithDataPayload(name, payload);
     data->testContent2 = _createReceivedContent(preSendCO);
@@ -310,7 +310,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     ccnxName_Release(&name);
 
     // Interest 2
-    name = ccnxName_CreateFromURI("lci:/test/content2");
+    name = ccnxName_CreateFromCString("lci:/test/content2");
     data->testInterest2 = _createTestInterest(name, NULL, NULL);
     ccnxName_Release(&name);
 
@@ -899,7 +899,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_ProcessMessage_Size)
 {
     TestData *data = longBowTestCase_GetClipBoardData(testCase);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_PIT "/stat/size");
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_PIT "/stat/size");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -924,7 +924,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_ProcessMessage_AvgEntryLifetime)
 {
     TestData *data = longBowTestCase_GetClipBoardData(testCase);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_PIT "/stat/avgEntryLifetime");
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_PIT "/stat/avgEntryLifetime");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -979,7 +979,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Performance)
     srand((uint32_t) parcClock_GetTime(data->testPIT->clock));
     for (size_t i = 0; i < ITERATIONS; ++i) {
         sprintf(uri, "%s%d", lciPrefix, rand());
-        name = ccnxName_CreateFromURI(uri);
+        name = ccnxName_CreateFromCString(uri);
         data->interests[i] = _createTestInterest(name, NULL, NULL);
         CCNxContentObject *psObject = ccnxContentObject_CreateWithDataPayload(name, payload);
         data->content[i] = _createReceivedContent(psObject);
