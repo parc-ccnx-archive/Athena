@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,10 +26,10 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#ifndef athena_Ethernet_h
-#define athena_Ethernet_h
+#ifndef libathena_Ethernet_h
+#define libathena_Ethernet_h
 
 #define CCNX_ETHERTYPE 0x0801
 
@@ -235,4 +235,4 @@ ssize_t athenaEthernet_Send(AthenaEthernet *athenaEthernet, struct iovec *iov, i
  */
 int athenaEthernet_GetDescriptor(AthenaEthernet *athenaEthernet);
 
-#endif // athena_Ethernet_h
+#endif // libathena_Ethernet_h

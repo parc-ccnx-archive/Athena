@@ -51,6 +51,7 @@
 #include <parc/algol/parc_HashCodeTable.h>
 #include <parc/algol/parc_Hash.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
+#include <ccnx/forwarder/athena/athena_TransportLinkModuleETH.h>
 #include <ccnx/forwarder/athena/athena_Ethernet.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
@@ -197,66 +198,52 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     int iovcnt = 2;
     size_t messageLength = 0;
 
-    // If the iovec we're prepending to has more than one element, allocate a new iovec of the right size
+    // If the iovec we're prepending to has more than one element, allocatedIovec holds the
+    // allocated IO vector of the right size that we must deallocate before returning.
     struct iovec *allocatedIovec = NULL;
 
     // Attach the header and populate the iovec
 
-    // First, look for an attached PARCBuffer
-    PARCBuffer *wireFormatBuffer = ccnxWireFormatMessage_GetWireFormatBuffer(ccnxMetaMessage);
+    CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
 
-    // If there's a PARCBuffer, convert it to an iovec, otherwise obtain the messages Iovec
-    if (wireFormatBuffer != NULL) {
+    iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
+    const struct iovec *networkBufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
+
+    // Trivial case, single iovec element.
+    if (iovcnt == 1) {
         // Header
         array[0].iov_len = sizeof(struct ether_header);
         array[0].iov_base = &header;
 
         // Message content
-        parcBuffer_SetPosition(wireFormatBuffer, 0);
-        array[1].iov_len = parcBuffer_Limit(wireFormatBuffer);
-        array[1].iov_base = parcBuffer_Overlay(wireFormatBuffer, array[0].iov_len);
-
+        array[1].iov_len = networkBufferIovec->iov_len;
+        array[1].iov_base = networkBufferIovec->iov_base;
         messageLength = array[0].iov_len + array[1].iov_len;
-        parcBuffer_SetPosition(wireFormatBuffer, 0);
     } else {
-        CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(ccnxMetaMessage);
-        assertNotNull(iovec, "Null io vector");
+        // Allocate a new iovec if more than one vector
+        allocatedIovec = parcMemory_Allocate(sizeof(struct iovec) * (iovcnt + 1));
+        array = allocatedIovec;
 
-        iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
-        const struct iovec *bufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
+        // Header
+        array[0].iov_len = sizeof(struct ether_header);
+        array[0].iov_base = &header;
+        messageLength = array[0].iov_len;
 
-        // Trivial case, single iovec element.
-        if (iovcnt == 1) {
-            // Header
-            array[0].iov_len = sizeof(struct ether_header);
-            array[0].iov_base = &header;
-
-            // Message content
-            array[1].iov_len = bufferIovec->iov_len;
-            array[1].iov_base = bufferIovec->iov_base;
-            messageLength = array[0].iov_len + array[1].iov_len;
-        } else {
-            // Allocate a new iovec if more than one vector
-            allocatedIovec = parcMemory_Allocate(sizeof(struct iovec) * (iovcnt + 1));
-            array = allocatedIovec;
-
-            // Header
-            array[0].iov_len = sizeof(struct ether_header);
-            array[0].iov_base = &header;
-            messageLength = array[0].iov_len;
-
-            // Append message content
-            for (int i = 0; i < iovcnt; i++) {
-                array[i + 1].iov_len = bufferIovec[i].iov_len;
-                array[i + 1].iov_base = bufferIovec[i].iov_base;
-                messageLength += array[i + 1].iov_len;
-            }
+        // Append message content
+        for (int i = 0; i < iovcnt; i++) {
+            array[i + 1].iov_len = networkBufferIovec[i].iov_len;
+            array[i + 1].iov_base = networkBufferIovec[i].iov_base;
+            messageLength += array[i + 1].iov_len;
         }
-        iovcnt++; // increment for the header
     }
+    iovcnt++; // increment for the header
 
     if (linkData->link.mtu) {
         if (messageLength > linkData->link.mtu) {
+            if (allocatedIovec != NULL) {
+                parcMemory_Deallocate(&allocatedIovec);
+            }
+            ccnxCodecNetworkBufferIoVec_Release(&iovec);
             errno = EMSGSIZE;
             return -1;
         }
@@ -267,9 +254,10 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
 
     ssize_t writeCount = 0;
     writeCount = athenaEthernet_Send(linkData->athenaEthernet, array, iovcnt);
+    ccnxCodecNetworkBufferIoVec_Release(&iovec);
 
     // Free up any storage allocated for a non-singular iovec
-    if (allocatedIovec != 0) {
+    if (allocatedIovec != NULL) {
         parcMemory_Deallocate(&allocatedIovec);
         array = NULL;
     }
@@ -282,6 +270,7 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
             return -1;
         }
         athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Error);
+
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
                       "send error (%s)", strerror(errno));
         linkData->_stats.send_Error++;
@@ -683,16 +672,59 @@ _ETHOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     return athenaTransportLink;
 }
 
-#define ETH_LISTENER_FLAG "listener"
 #define LINK_NAME_SPECIFIER "name%3D"
-#define SRC_LINK_SPECIFIER "src%3D"
 #define LOCAL_LINK_FLAG "local%3D"
 #define LINK_MTU_SIZE "mtu%3D"
-
-#include <parc/algol/parc_URIAuthority.h>
+#define SRC_LINK_SPECIFIER "src%3D"
+#define ETH_LISTENER_FLAG "listener"
 
 static int
-_parse_address(const char *string, struct ether_addr *address)
+_parseLinkName(const char *token, char *name)
+{
+    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+        return -1;
+    }
+    return 0;
+}
+
+static int
+_parseLocalFlag(const char *token)
+{
+    int forceLocal = 0;
+    char localFlag[MAXPATHLEN] = { 0 };
+    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
+        return 0;
+    }
+    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
+        forceLocal = AthenaTransportLink_ForcedNonLocal;
+    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
+        forceLocal = AthenaTransportLink_ForcedLocal;
+    }
+    return forceLocal;
+}
+
+static size_t
+_parseMTU(const char *token, size_t *mtu)
+{
+    if (sscanf(token, "%*[^%%]%%3D%zd", mtu) != 1) {
+        return -1;
+    }
+    return *mtu;
+}
+
+static int
+_parseSrc(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, struct ether_addr *srcMAC)
+{
+    char srcAddressString[NI_MAXHOST];
+    if (sscanf(token, "%*[^%%]%%3D%[^%%]", srcAddressString) != 1) {
+        errno = EINVAL;
+        return -1;
+    }
+    return _stringToEtherAddr(srcMAC, srcAddressString);
+}
+
+static int
+_parseAddress(const char *string, struct ether_addr *address)
 {
     char addressString[NI_MAXHOST] = { 0 };
     char device[NI_MAXHOST] = { 0 };
@@ -707,43 +739,7 @@ _parse_address(const char *string, struct ether_addr *address)
     return 0;
 }
 
-static int
-_parse_src(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, struct ether_addr *srcMAC)
-{
-    char srcAddressString[NI_MAXHOST];
-    if (sscanf(token, "%*[^%%]%%3D%[^%%]", srcAddressString) != 1) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Improper connection source specification (%s)", token);
-        errno = EINVAL;
-        return -1;
-    }
-    return _stringToEtherAddr(srcMAC, srcAddressString);
-}
-
-static int
-_parse_local(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, int *forceLocal)
-{
-    char localFlag[MAXPATHLEN] = { 0 };
-
-    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Improper local specification (%s)", token);
-        errno = EINVAL;
-        return -1;
-    }
-    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
-        *forceLocal = AthenaTransportLink_ForcedNonLocal;
-    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
-        *forceLocal = AthenaTransportLink_ForcedLocal;
-    } else {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Improper local state specification (%s)", token);
-        parcMemory_Deallocate(&token);
-        errno = EINVAL;
-        return -1;
-    }
-    return 0;
-}
+#include <parc/algol/parc_URIAuthority.h>
 
 static AthenaTransportLink *
 _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
@@ -761,25 +757,21 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     PARCURIAuthority *authority = parcURIAuthority_Parse(authorityString);
     const char *URIHostname = parcURIAuthority_GetHostName(authority);
     strcpy(device, URIHostname);
-    struct ether_addr destMAC;
-    if (_parse_address(authorityString, &destMAC) != 0) {
+
+    bool srcMACSpecified = false;
+    struct ether_addr srcMAC = { { 0 } };
+    struct ether_addr destMAC = { { 0 } };
+    if (_parseAddress(authorityString, &destMAC) != 0) {
         parcURIAuthority_Release(&authority);
         errno = EINVAL;
         return NULL;
     }
-
     parcURIAuthority_Release(&authority);
 
-    bool listener = false;
-
-    char name[MAXPATHLEN] = { 0 };
+    bool isListener = false;
     char *linkName = NULL;
-
-    struct ether_addr srcMAC = { {0} };
-    bool srcMACSpecified = false;
-
+    char specifiedLinkName[MAXPATHLEN] = { 0 };
     size_t mtu = 0;
-
     int forceLocal = 0;
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
@@ -793,24 +785,25 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
             if (srcMACSpecified == false) {
                 memcpy(&srcMAC, &destMAC, sizeof(struct ether_addr));
             }
-            listener = true;
+            isListener = true;
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, SRC_LINK_SPECIFIER, strlen(SRC_LINK_SPECIFIER)) == 0) {
-            if (_parse_src(athenaTransportLinkModule, token, &srcMAC) == 0) {
-                srcMACSpecified = true;
-                parcMemory_Deallocate(&token);
-                continue;
-            } else {
+            if (_parseSrc(athenaTransportLinkModule, token, &srcMAC) != 0) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Improper connection source specification (%s)", token);
                 parcMemory_Deallocate(&token);
                 return NULL;
             }
+            srcMACSpecified = true;
+            parcMemory_Deallocate(&token);
+            continue;
         }
 
         if (strncasecmp(token, LINK_MTU_SIZE, strlen(LINK_MTU_SIZE)) == 0) {
-            if (sscanf(token, "%*[^%%]%%3D%zd", &mtu) != 1) {
+            if (_parseMTU(token, &mtu) == -1) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper MTU specification (%s)", token);
                 parcMemory_Deallocate(&token);
@@ -822,26 +815,29 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         }
 
         if (strncasecmp(token, LINK_NAME_SPECIFIER, strlen(LINK_NAME_SPECIFIER)) == 0) {
-            if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+            if (_parseLinkName(token, specifiedLinkName) != 0) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection name specification (%s)", token);
                 parcMemory_Deallocate(&token);
                 errno = EINVAL;
                 return NULL;
             }
-            linkName = name;
+            linkName = specifiedLinkName;
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LOCAL_LINK_FLAG, strlen(LOCAL_LINK_FLAG)) == 0) {
-            if (_parse_local(athenaTransportLinkModule, token, &forceLocal) == 0) {
+            forceLocal = _parseLocalFlag(token);
+            if (forceLocal == 0) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Improper local specification (%s)", token);
                 parcMemory_Deallocate(&token);
-                continue;
-            } else {
-                parcMemory_Deallocate(&token);
+                errno = EINVAL;
                 return NULL;
             }
+            parcMemory_Deallocate(&token);
+            continue;
         }
 
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
@@ -851,7 +847,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         return NULL;
     }
 
-    if (listener) {
+    if (isListener) {
         result = _ETHOpenListener(athenaTransportLinkModule, linkName, device, &srcMAC, mtu);
     } else {
         if (srcMACSpecified) {
@@ -896,4 +892,9 @@ athenaTransportLinkModuleETH_Init()
     assertTrue(result == true, "parcArrayList_Add failed");
 
     return moduleList;
+}
+
+void
+athenaTransportLinkModuleETH_Fini()
+{
 }

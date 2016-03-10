@@ -325,7 +325,8 @@ athena_EncodeMessage(CCNxMetaMessage *message)
 {
     PARCSigner *signer = ccnxValidationCRC32C_CreateSigner();
     CCNxCodecNetworkBufferIoVec *iovec = ccnxCodecTlvPacket_DictionaryEncode(message, signer);
-    assertTrue(ccnxWireFormatMessage_PutIoVec(message, iovec), "ccnxWireFormatMessage_PutIoVec failed");;
+    bool result = ccnxWireFormatMessage_PutIoVec(message, iovec);
+    assertTrue(result, "ccnxWireFormatMessage_PutIoVec failed");
     ccnxCodecNetworkBufferIoVec_Release(&iovec);
     parcSigner_Release(&signer);
 }

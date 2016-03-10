@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #include <config.h>
 
@@ -245,4 +245,58 @@ void
 athenaTransportLinkModule_SetLogLevel(AthenaTransportLinkModule *athenaTransportLinkModule, const PARCLogLevel level)
 {
     parcLog_SetLevel(athenaTransportLinkModule->log, level);
+}
+
+PARCBuffer *
+athenaTransportLinkModule_GetMessageBuffer(CCNxMetaMessage *message)
+{
+    PARCBuffer *buffer = ccnxWireFormatMessage_GetWireFormatBuffer(message);
+
+    // If there is no PARCBuffer present, check for an IO vector and convert that into a contiguous buffer.
+    if (buffer == NULL) {
+        CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(message);
+        assertNotNull(iovec, "Null io vector");
+        size_t iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
+        const struct iovec *array = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
+
+        // If it's a single vector wrap it in a buffer to avoid a copy
+        if (iovcnt == 1) {
+            buffer = parcBuffer_Wrap(array[0].iov_base, array[0].iov_len, 0, array[0].iov_len);
+        } else {
+            size_t totalbytes = 0;
+            for (int i = 0; i < iovcnt; i++) {
+                totalbytes += array[i].iov_len;
+            }
+            buffer = parcBuffer_Allocate(totalbytes);
+            for (int i = 0; i < iovcnt; i++) {
+                parcBuffer_PutArray(buffer, array[i].iov_len, array[i].iov_base);
+            }
+            parcBuffer_Flip(buffer);
+        }
+    } else {
+        buffer = parcBuffer_Acquire(buffer);
+    }
+
+    return buffer;
+}
+
+CCNxCodecNetworkBufferIoVec *
+athenaTransportLinkModule_GetMessageIoVector(CCNxMetaMessage *message)
+{
+    CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(message);
+
+    // If there was no io vector present, check for a buffer and convert that into an iovec
+    if (iovec == NULL) {
+        PARCBuffer *buffer = ccnxWireFormatMessage_GetWireFormatBuffer(message);
+        assertNotNull(buffer, "Null message buffer");
+        CCNxCodecNetworkBuffer *netbuff = ccnxCodecNetworkBuffer_Create(&ParcMemoryMemoryBlock, NULL);
+        assertNotNull(netbuff, "Null network buffer allocation");
+        ccnxCodecNetworkBuffer_PutBuffer(netbuff, buffer);
+        iovec = ccnxCodecNetworkBuffer_CreateIoVec(netbuff);
+        ccnxCodecNetworkBuffer_Release(&netbuff);
+    } else {
+        iovec = ccnxCodecNetworkBufferIoVec_Acquire(iovec);
+    }
+
+    return iovec;
 }

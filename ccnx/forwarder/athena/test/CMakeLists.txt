@@ -12,6 +12,7 @@ set(TestsExpectedToPass
   test_athena_TransportLinkModuleTCP 
   test_athena_TransportLinkModuleUDP 
   test_athena_TransportLinkModuleETH 
+  test_athena_TransportLinkModuleTEMPLATE 
   test_athena_ContentStore 
   test_athena_LRUContentStore 
   test_athena_InterestControl 
