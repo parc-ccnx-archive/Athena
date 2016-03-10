@@ -462,7 +462,7 @@ LONGBOW_TEST_CASE(Local, _moveContentStoreEntryToLRUHead)
     CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name, NULL);
     ccnxName_Release(&name);
 
-    name = ccnxName_CreateFromURI("lci:/fourth/entry");
+    name = ccnxName_CreateFromCString("lci:/fourth/entry");
     CCNxContentObject *contentObject4 = ccnxContentObject_CreateWithDataPayload(name, NULL);
     ccnxName_Release(&name);
 
