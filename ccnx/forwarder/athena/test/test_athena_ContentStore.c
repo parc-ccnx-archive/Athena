@@ -213,7 +213,7 @@ LONGBOW_TEST_CASE(Global, setGetCapacity)
     AthenaContentStore *store = athenaContentStore_Create(&AthenaContentStore_LRUImplementation, &config);
 
     size_t capacity = athenaContentStore_GetCapacity(store);
-    assertTrue(capacity = config.capacityInMB, "Expected the same capacity as we specified at init");
+    assertTrue(capacity == config.capacityInMB, "Expected the same capacity as we specified at init");
 
     size_t newCapacity = 20;
     athenaContentStore_SetCapacity(store, newCapacity);
