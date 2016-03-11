@@ -162,7 +162,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceive)
 
     athenaTransportLinkAdapter_Poll(athenaTransportLinkAdapter, 0);
 
-    CCNxName *name = ccnxName_CreateFromURI("lci:/foo/bar");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
     CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -225,7 +225,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_MTU)
 
     athenaTransportLinkAdapter_Poll(athenaTransportLinkAdapter, 0);
 
-    CCNxName *name = ccnxName_CreateFromURI("lci:/foo/bar");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
     CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -274,7 +274,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_P2P)
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
-    CCNxName *name = ccnxName_CreateFromURI("lci:/foo/bar");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
     CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 

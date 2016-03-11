@@ -103,7 +103,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessInterest)
 {
     PARCURI *connectionURI;
     Athena *athena = athena_Create(100);
-    CCNxName *name = ccnxName_CreateFromURI("lci:/foo/bar/baz");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar/baz");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
 
     uint64_t chunkNum = 0;
@@ -151,7 +151,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessInterest)
 
     // Add route for interest, it should now be forwarded
     athenaFIB_AddRoute(athena->athenaFIB, name, contentObjectIngressVector);
-    CCNxName *defaultName = ccnxName_CreateFromURI("lci:/");
+    CCNxName *defaultName = ccnxName_CreateFromCString("lci:/");
     athenaFIB_AddRoute(athena->athenaFIB, defaultName, contentObjectIngressVector);
     ccnxName_Release(&defaultName);
 
@@ -159,7 +159,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessInterest)
     athena_ProcessMessage(athena, interest, interestIngressVector);
 
     // Process a super-interest match
-    CCNxName *superName = ccnxName_CreateFromURI("lci:/foo/bar/baz/unmatched");
+    CCNxName *superName = ccnxName_CreateFromCString("lci:/foo/bar/baz/unmatched");
     CCNxInterest *superInterest = ccnxInterest_CreateSimple(superName);
     athena_EncodeMessage(superInterest);
     athena_ProcessMessage(athena, superInterest, interestIngressVector);
@@ -167,7 +167,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessInterest)
     ccnxInterest_Release(&superInterest);
 
     // Process no-match/default route interest
-    CCNxName *noMatchName = ccnxName_CreateFromURI("lci:/buggs/bunny");
+    CCNxName *noMatchName = ccnxName_CreateFromCString("lci:/buggs/bunny");
     CCNxInterest *noMatchInterest = ccnxInterest_CreateSimple(noMatchName);
     athena_EncodeMessage(noMatchInterest);
     athena_ProcessMessage(athena, noMatchInterest, interestIngressVector);
@@ -192,7 +192,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessContentObject)
     PARCURI *connectionURI;
     Athena *athena = athena_Create(100);
 
-    CCNxName *name = ccnxName_CreateFromURI("lci:/cakes/and/pies");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/cakes/and/pies");
     uint64_t chunkNum = 0;
     CCNxNameSegment *chunkSegment = ccnxNameSegmentNumber_Create(CCNxNameLabelType_CHUNK, chunkNum);
     ccnxName_Append(name, chunkSegment);
@@ -262,7 +262,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessInterestReturn)
     PARCURI *connectionURI;
     Athena *athena = athena_Create(100);
 
-    CCNxName *name = ccnxName_CreateFromURI("lci:/boose/roo/pie");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/boose/roo/pie");
 
     CCNxInterest *interest =
         ccnxInterest_CreateWithImpl(&CCNxInterestFacadeV1_Implementation,
@@ -332,7 +332,7 @@ LONGBOW_TEST_CASE(Global, athena_ForwarderEngine)
     int linkId = athenaTransportLinkAdapter_LinkNameToId(athena->athenaTransportLinkAdapter, "TCP_1");
     parcBitVector_Set(linkVector, linkId);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Quit);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Quit);
     CCNxMetaMessage *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 

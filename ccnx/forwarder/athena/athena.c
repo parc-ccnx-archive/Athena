@@ -100,7 +100,7 @@ athena_Create(size_t contentStoreSizeInMB)
 {
     Athena *athena = parcObject_CreateAndClearInstance(Athena);
 
-    athena->athenaName = ccnxName_CreateFromURI(CCNxNameAthena_Forwarder);
+    athena->athenaName = ccnxName_CreateFromCString(CCNxNameAthena_Forwarder);
     assertNotNull(athena->athenaName, "Failed to create forwarder name (%s)", CCNxNameAthena_Forwarder);
 
     athena->athenaFIB = athenaFIB_Create();
@@ -211,12 +211,10 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
     //         non-local interface so we need not check that here.
     //
     ccnxName = ccnxInterest_GetName(interest);
-    PARCBitVector *egressVector = athenaFIB_Lookup(athena->athenaFIB, ccnxName);
+    PARCBitVector *egressVector = athenaFIB_Lookup(athena->athenaFIB, ccnxName, ingressVector);
 
     if (egressVector != NULL) {
-        // Remove the link the interest came from if it was included in the FIB entry
-        parcBitVector_ClearVector(egressVector, ingressVector);
-        // If no links remain, send a no route interest return message
+        // If no links are in the egress vector the FIB returned, return a no route interest message
         if (parcBitVector_NumberOfBitsSet(egressVector) == 0) {
             CCNxInterestReturn *interestReturn = ccnxInterestReturn_Create(interest, CCNxInterestReturn_ReturnCode_NoRoute);
             PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interestReturn, ingressVector);
@@ -230,6 +228,7 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
                 parcBitVector_Release(&result);
             }
         }
+        parcBitVector_Release(&egressVector);
     } else {
         // No FIB entry found, return a NoRoute interest return and remove the entry from the PIT.
         CCNxInterestReturn *interestReturn = ccnxInterestReturn_Create(interest, CCNxInterestReturn_ReturnCode_NoRoute);
@@ -326,7 +325,8 @@ athena_EncodeMessage(CCNxMetaMessage *message)
 {
     PARCSigner *signer = ccnxValidationCRC32C_CreateSigner();
     CCNxCodecNetworkBufferIoVec *iovec = ccnxCodecTlvPacket_DictionaryEncode(message, signer);
-    assertTrue(ccnxWireFormatMessage_PutIoVec(message, iovec), "ccnxWireFormatMessage_PutIoVec failed");;
+    bool result = ccnxWireFormatMessage_PutIoVec(message, iovec);
+    assertTrue(result, "ccnxWireFormatMessage_PutIoVec failed");
     ccnxCodecNetworkBufferIoVec_Release(&iovec);
     parcSigner_Release(&signer);
 }

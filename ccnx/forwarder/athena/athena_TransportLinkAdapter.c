@@ -322,12 +322,14 @@ _athenaTransportLinkAdapter_AddLink(AthenaTransportLinkAdapter *athenaTransportL
     // Add to listenerList or instanceList
     athenaTransportLink_Acquire(newTransportLink);
     if (athenaTransportLink_IsNotRoutable(newTransportLink)) { // listener
-        assertTrue(parcArrayList_Add(athenaTransportLinkAdapter->listenerList, newTransportLink), "parcArrayList_Add failed to add new listener");
+        bool result = parcArrayList_Add(athenaTransportLinkAdapter->listenerList, newTransportLink);
+        assertTrue(result, "parcArrayList_Add failed to add new listener");
     } else { // routable link, add to instances using the last available id if one was seen
         if (linkId != -1) {
             parcArrayList_Set(athenaTransportLinkAdapter->instanceList, linkId, newTransportLink);
         } else {
-            assertTrue(parcArrayList_Add(athenaTransportLinkAdapter->instanceList, newTransportLink), "parcArrayList_Add failed to add new link instance");
+            bool result = parcArrayList_Add(athenaTransportLinkAdapter->instanceList, newTransportLink);
+            assertTrue(result, "parcArrayList_Add failed to add new link instance");
         }
     }
 

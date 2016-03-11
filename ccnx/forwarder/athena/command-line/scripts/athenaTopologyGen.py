@@ -46,7 +46,16 @@ graph = graph_from_dot_file(args.dotfile)
 # Setup dircetory variables
 keyfileName = 'keyfile'
 password = 'foo'
-build_dir = '../../../../../../../usr'
+
+import sys
+import os
+try:
+    build_dir = os.environ['CCNX_HOME']
+except KeyError:
+    print "You must set a CCNX_HOME environment variable to the location of your CCNx build directory."
+    print "Exiting ..."
+    sys.exit(1)
+
 athena = build_dir + '/bin/athena'
 athena_ctl = build_dir + '/bin/athenactl -f ' + keyfileName + ' -p ' + password
 
@@ -60,9 +69,10 @@ next_udp_port = {}
 cmd_output = subprocess.Popen('pkill athena', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 
 # Create the keystore
-create_key_cmd = [build_dir + '/bin/parc_publickey -c' + ' ' + keyfileName + ' ' + password + ' ' + 'athena 1024 365']
+create_key_cmd = [build_dir + '/bin/parc-publickey -c' + ' ' + keyfileName + ' ' + password + ' ' + 'athena 1024 365']
 print "Processing command %s." % create_key_cmd
-cmd_output = subprocess.Popen(create_key_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+if subprocess.call(create_key_cmd, shell=True) != 0:
+    sys.exit(1)
 print cmd_output.stdout.readlines()
 
 # Find all edges of the graph

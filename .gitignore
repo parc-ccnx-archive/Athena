@@ -15,4 +15,8 @@ test_athena_PIT
 athena.out
 .dirstamp
 test_athena_Ethernet.trs
+<<<<<<< HEAD
 .idea/
+=======
+.idea
+>>>>>>> parc_upstream/master
