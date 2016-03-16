@@ -134,18 +134,19 @@ bool athenaFIB_RemoveLink(AthenaFIB *athenaFIB, const PARCBitVector *ccnxLinkVec
  *
  * @param [in] athenaFIB
  * @param [in] ccnxMessage
- * @return vector of links to send message to
+ * @param [in] ingressVector origin of message
+ * @return vector of links to send message out on
  *
  * Example:
  * @code
  * {
- *     PARCBitVector *egressVector = athenaFIB_Lookup(athenaFIB, ccnxMessage);
+ *     PARCBitVector *egressVector = athenaFIB_Lookup(athenaFIB, ccnxMessage, ingressVector);
  *     _transportSendMessage(ccnxMessage, egressVector);
  *     parcBitVector_Release(egressVector);
  * }
  * @endcode
  */
-PARCBitVector *athenaFIB_Lookup(AthenaFIB *athenaFIB, const CCNxName *ccnxName);
+PARCBitVector *athenaFIB_Lookup(AthenaFIB *athenaFIB, const CCNxName *ccnxName, PARCBitVector *ingressVector);
 
 /**
  * @abstract add route to FIB

@@ -95,7 +95,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
     Athena *athena = athena_Create(0);
     PARCBitVector *ingressVector = parcBitVector_Create();
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "tcp://localhost:50600/listener/name=TCPListener";
@@ -110,7 +110,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "tcp://localhost:50600/name=TCP_0";
@@ -125,7 +125,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBAddRoute);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBAddRoute);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -135,7 +135,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBAddRoute);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBAddRoute);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "/foo/bar TCP_0"; // bad prefix
@@ -150,7 +150,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBAddRoute);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBAddRoute);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "lci:/foo/bar"; // missing link name
@@ -165,7 +165,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBAddRoute);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBAddRoute);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "lci:/foo/bar TCP_0";
@@ -180,7 +180,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBLookup);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBLookup);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "lci:/foo/bar";
@@ -195,7 +195,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBList);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBList);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -205,7 +205,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_FIB)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_FIBRemoveRoute);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBRemoveRoute);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "TCP_0 lci:/foo/bar";
@@ -231,7 +231,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_TransportLinkAdapter)
     Athena *athena = athena_Create(0);
     PARCBitVector *ingressVector = parcBitVector_Create();
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "tcp://localhost:50600/ilster/name=TCPListener";
@@ -247,7 +247,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_TransportLinkAdapter)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -257,7 +257,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_TransportLinkAdapter)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkConnect);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "tcp://localhost:50600/listener/name=TCPListener";
@@ -272,7 +272,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_TransportLinkAdapter)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkDisconnect);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkDisconnect);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "TCPListener";
@@ -287,7 +287,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_TransportLinkAdapter)
 
     ccnxMetaMessage_Release(&interest);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkList);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkList);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
     linkSpecification = "";
@@ -310,7 +310,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Control)
 {
     Athena *athena = athena_Create(0);
     PARCBitVector *ingressVector = parcBitVector_Create();
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_Control);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_Control);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -328,7 +328,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_ContentStore)
 {
     Athena *athena = athena_Create(0);
     PARCBitVector *ingressVector = parcBitVector_Create();
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_ContentStore "/unknown");
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_ContentStore "/unknown");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -346,7 +346,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_PIT)
 {
     Athena *athena = athena_Create(0);
     PARCBitVector *ingressVector = parcBitVector_Create();
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_PIT "/unknown");
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_PIT "/unknown");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -369,7 +369,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Set)
     char logLevelURI[MAXPATHLEN];
 
     sprintf(logLevelURI, "%s/invalie", CCNxNameAthenaCommand_Set);
-    CCNxName *name = ccnxName_CreateFromURI(logLevelURI);
+    CCNxName *name = ccnxName_CreateFromCString(logLevelURI);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -382,7 +382,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Set)
     ccnxMetaMessage_Release(&interest);
 
     sprintf(logLevelURI, "%s/level", CCNxNameAthenaCommand_Set);
-    name = ccnxName_CreateFromURI(logLevelURI);
+    name = ccnxName_CreateFromCString(logLevelURI);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -396,7 +396,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Set)
 
     for (int i = 0; _logLevels[i]; i++) {
         sprintf(logLevelURI, "%s/level/%s", CCNxNameAthenaCommand_Set, _logLevels[i]);
-        name = ccnxName_CreateFromURI(logLevelURI);
+        name = ccnxName_CreateFromCString(logLevelURI);
         interest = ccnxInterest_CreateSimple(name);
         ccnxName_Release(&name);
 
@@ -416,7 +416,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Quit)
 {
     Athena *athena = athena_Create(0);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Quit);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Quit);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -434,7 +434,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Stats)
 {
     Athena *athena = athena_Create(0);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Stats);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Stats);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -452,7 +452,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Spawn)
 {
     Athena *athena = athena_Create(0);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Run);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Run);
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -474,7 +474,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Spawn)
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open should have failed");
     parcURI_Release(&connectionURI);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Run);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Run);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -499,7 +499,7 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Spawn)
     int linkId = athenaTransportLinkAdapter_LinkNameToId(athena->athenaTransportLinkAdapter, "TCP_1");
     parcBitVector_Set(linkVector, linkId);
 
-    name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_Quit);
+    name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_Quit);
     interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -541,7 +541,7 @@ LONGBOW_TEST_CASE(Static, _create_stats_response)
 {
     Athena *athena = athena_Create(0);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_Control "/stats");
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_Control "/stats");
 
     CCNxMetaMessage *response = _create_stats_response(athena, name);
 

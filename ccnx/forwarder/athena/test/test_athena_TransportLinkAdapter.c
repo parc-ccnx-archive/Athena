@@ -290,7 +290,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkAdapter_SendReceive)
     receiveMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
     assertNull(resultVector, "Received message when none sent");
 
-    CCNxName *name = ccnxName_CreateFromURI("lci:/foo/bar");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
     CCNxMetaMessage *sendMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
@@ -447,7 +447,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkAdapter_ListLinks)
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthenaCommand_LinkList);
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkList);
     CCNxInterest *ccnxMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 

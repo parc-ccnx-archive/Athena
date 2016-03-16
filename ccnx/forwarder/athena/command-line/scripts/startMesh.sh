@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright (c) 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
 # All rights reserved.
@@ -41,13 +41,8 @@
 #
 
 #
-# Set ATHENADIR to your CCNx build
-#
-ATHENADIR=${CCNX_HOME:-../../../../../../../usr}
-
-#
 # Start first forwarder on 9695 then create $INSTANCES additional instances in a fully
-# connected mesh (star).
+# connected mesh.
 #
 FIRSTPORT=9695
 INSTANCES=4 # Mac OS X may run out of file descriptors above 33
@@ -62,22 +57,61 @@ PASSWORD=foo
 
 #
 # Set NOTLOCAL to "local=true" to turn off hoplimit counting
-# "local=true" will cause non-terminating forwarding loops if a service isn't answering
+# "local=true" may cause non-terminating forwarding loops if a service doesn't answer
 #
 NOTLOCAL="local=false"
 
 #####
 #####
 
-ATHENA="${ATHENADIR}/bin/athena"
-ATHENACTL="${ATHENADIR}/bin/athenactl -p ${PASSWORD} -f ${KEYFILE}"
-TUTORIAL_SERVER=${ATHENADIR}/bin/tutorial_Server
-TUTORIAL_CLIENT=${ATHENADIR}/bin/tutorial_Client
+#
+# Default locations for applications that we depend upon
+#
+ATHENA=../../../../../../../usr/bin/athena
+ATHENACTL=../../../../../../../usr/bin/athenactl
+PARC_PUBLICKEY=../../../../../../../usr/bin/parc-publickey
+TUTORIAL_SERVER=../../../../../../../usr/bin/ccnxSimpleFileTransfer_Server
+TUTORIAL_CLIENT=../../../../../../../usr/bin/ccnxSimpleFileTransfer_Client
+
+DEPENDENCIES="ATHENA ATHENACTL PARC_PUBLICKEY TUTORIAL_SERVER TUTORIAL_CLIENT"
 
 #
-# Setup a key for athenactl
+# Check any set CCNX_HOME/PARC_HOME environment settings, then the default path, then our build directories.
 #
-${ATHENADIR}/bin/parc_publickey -c ${KEYFILE} ${PASSWORD} athena 1024 365
+for program in ${DEPENDENCIES}
+do
+    eval defaultPath=\${${program}}               # <NAME>=<DEFAULT_PATH>
+    appName=`expr ${defaultPath} : '.*/\(.*\)'`
+    if [ -x ${CCNX_HOME}/bin/${appName} ]; then   # check CCNX_HOME
+        eval ${program}=${CCNX_HOME}/bin/${appName}
+    elif [ -x ${PARC_HOME}/bin/${appName} ]; then # check PARC_HOME
+        eval ${program}=${PARC_HOME}/bin/${appName}
+    else                                          # check PATH
+        eval ${program}=""
+        localPathLookup=`which ${appName}`
+        if [ $? -eq 0 ]; then
+            eval ${program}=${localPathLookup}
+        else                                      # use default build directory location
+            [ -f ${defaultPath} ] && eval ${program}=${defaultPath}
+        fi
+    fi
+    eval using=\${${program}}
+    if [ "${using}" = "" ]; then
+        echo Couldn\'t locate ${appName}, set CCNX_HOME or PARC_HOME to its location.
+        exit 1
+    fi
+    echo Using ${program}=${using}
+done
+
+#
+# Add key and password parameters to athenactl arguments
+#
+ATHENACTL="${ATHENACTL} -p ${PASSWORD} -f ${KEYFILE}"
+
+#
+# Setup the key for athenactl
+#
+${PARC_PUBLICKEY} -c ${KEYFILE} ${PASSWORD} athena 1024 365
 
 ${ATHENA} -c tcp://localhost:${FIRSTPORT}/listener &
 trap "kill -HUP $!" INT
