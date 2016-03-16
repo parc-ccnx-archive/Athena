@@ -7,10 +7,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-if( UNIX )
-  link_libraries(m)
-endif( UNIX )
-
 include( CTest )
 include( version )
 include( detectCacheSize )
@@ -18,7 +14,6 @@ include( detectCacheSize )
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_C_FLAGS_NOPANTS "${CMAKE_C_FLAGS_NOPANTS} -O3 -DNDEBUG -DAthena_DISABLE_VALIDATION")
 
-link_directories($ENV{CCNX_DEPENDENCIES}/lib)
 include_directories($ENV{CCNX_DEPENDENCIES}/include)
 set(OPENSSL_ROOT_DIR $ENV{CCNX_DEPENDENCIES})
 
@@ -60,33 +55,21 @@ set(ATHENA_LINK_LIBRARIES
   ${CCNX_TRANSPORT_RTA_LIBRARIES}
   ${CCNX_COMMON_LIBRARIES}
   ${LIBPARC_LIBRARIES}
-  -ldl
+  dl
   )
 
-# use, i.e. don't skip the full RPATH for the build tree
-set(CMAKE_SKIP_BUILD_RPATH false)
+if( UNIX )
+  link_libraries(m)
+endif( UNIX )
 
-# when building, use the install RPATH already
-set(CMAKE_BUILD_WITH_INSTALL_RPATH true)
-
-# Build libraries location
-set(CMAKE_INSTALL_RPATH "${CCNX_HOME}/lib")
-
-# add the automatically determined parts of the RPATH
-# which point to directories outside the build tree to the install RPATH
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH true)
-
-# the RPATH to be used when installing, but only if it's not a system directory
-list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
-if("${isSystemDir}" STREQUAL "-1")
-   set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-endif("${isSystemDir}" STREQUAL "-1")
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
 macro(AddTest testFile)
   add_executable(${ARGV0} ${ARGV0}.c)
   target_link_libraries(${ARGV0} ${ATHENA_LINK_LIBRARIES})
   add_test(${ARGV0} ${ARGV0})
   set_target_properties(${ARGV0} PROPERTIES FOLDER Test)
+  set_tests_properties(${ARGV0} PROPERTIES ENVIRONMENT LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/ccnx/forwarder/athena)
 endmacro(AddTest)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
