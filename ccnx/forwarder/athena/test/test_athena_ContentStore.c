@@ -103,7 +103,7 @@ LONGBOW_TEST_FIXTURE_TEARDOWN(Global)
 static CCNxContentObject *
 _createContentObject(char *lci, uint64_t chunkNum, PARCBuffer *payload)
 {
-    CCNxName *name = ccnxName_CreateFromURI(lci);
+    CCNxName *name = ccnxName_CreateFromCString(lci);
     CCNxNameSegment *chunkSegment = ccnxNameSegmentNumber_Create(CCNxNameLabelType_CHUNK, chunkNum);
     ccnxName_Append(name, chunkSegment);
 
@@ -152,7 +152,7 @@ LONGBOW_TEST_CASE(Global, removeMatch)
     PARCClock *clock = parcClock_Wallclock();
     char *lci = "lci:/cakes/and/pies";
 
-    CCNxName *origName = ccnxName_CreateFromURI(lci);
+    CCNxName *origName = ccnxName_CreateFromCString(lci);
     CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(origName, NULL);
 
     ccnxContentObject_SetExpiryTime(contentObject, parcClock_GetTime(clock) + 100);
@@ -161,7 +161,7 @@ LONGBOW_TEST_CASE(Global, removeMatch)
     athenaContentStore_PutContentObject(store, contentObject);
     ccnxContentObject_Release(&contentObject);
 
-    CCNxName *testName = ccnxName_CreateFromURI(lci);
+    CCNxName *testName = ccnxName_CreateFromCString(lci);
     bool status = athenaContentStore_RemoveMatch(store, testName, NULL, NULL);
     // TODO: match on other than name!
     assertTrue(status, "Expected to remove the contentobject we had");
@@ -181,14 +181,14 @@ LONGBOW_TEST_CASE(Global, getMatchByName)
 
     PARCClock *clock = parcClock_Wallclock();
 
-    CCNxName *truthName = ccnxName_CreateFromURI(lci);
+    CCNxName *truthName = ccnxName_CreateFromCString(lci);
     CCNxContentObject *truthObject = ccnxContentObject_CreateWithDataPayload(truthName, NULL);
     ccnxContentObject_SetExpiryTime(truthObject, parcClock_GetTime(clock) + 100);
     ccnxName_Release(&truthName);
 
     athenaContentStore_PutContentObject(store, truthObject);
 
-    CCNxName *testName = ccnxName_CreateFromURI(lci);
+    CCNxName *testName = ccnxName_CreateFromCString(lci);
     CCNxInterest *interest = ccnxInterest_CreateSimple(testName);
     ccnxName_Release(&testName);
 
@@ -213,7 +213,7 @@ LONGBOW_TEST_CASE(Global, setGetCapacity)
     AthenaContentStore *store = athenaContentStore_Create(&AthenaContentStore_LRUImplementation, &config);
 
     size_t capacity = athenaContentStore_GetCapacity(store);
-    assertTrue(capacity = config.capacityInMB, "Expected the same capacity as we specified at init");
+    assertTrue(capacity == config.capacityInMB, "Expected the same capacity as we specified at init");
 
     size_t newCapacity = 20;
     athenaContentStore_SetCapacity(store, newCapacity);
@@ -229,7 +229,7 @@ LONGBOW_TEST_CASE(Global, processMessage)
     config.capacityInMB = 10;
     AthenaContentStore *store = athenaContentStore_Create(&AthenaContentStore_LRUImplementation, &config);
 
-    CCNxName *name = ccnxName_CreateFromURI(CCNxNameAthena_ContentStore "/stat/size");
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthena_ContentStore "/stat/size");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
 
     CCNxMetaMessage *message = ccnxMetaMessage_CreateFromInterest(interest);
@@ -358,7 +358,7 @@ LONGBOW_TEST_FIXTURE_TEARDOWN(EmptyImplementation)
 LONGBOW_TEST_CASE(EmptyImplementation, apiFunctions)
 {
     AthenaContentStore *store = athenaContentStore_Create(&EmptyContentStoreImplementation, NULL);
-    CCNxName *name = ccnxName_CreateFromURI("lci:/pie/is/always/good");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/pie/is/always/good");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
 
     athena_EncodeMessage(interest);
@@ -375,7 +375,7 @@ LONGBOW_TEST_CASE(EmptyImplementation, booleanApiFunctions)
     AthenaContentStore *store = athenaContentStore_Create(&EmptyContentStoreImplementation, NULL);
 
     CCNxContentObject *contentObject = _createContentObject("lci:/dogs/are/better/than/cats", 10, NULL);
-    CCNxName *name = ccnxName_CreateFromURI("lci:/pie/is/always/good");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/pie/is/always/good");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
 
     //athena_EncodeMessage(interest);
