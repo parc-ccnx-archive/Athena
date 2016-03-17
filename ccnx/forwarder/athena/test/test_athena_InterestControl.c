@@ -37,6 +37,12 @@
 #include <pthread.h>
 
 #include <parc/algol/parc_SafeMemory.h>
+#include <parc/security/parc_Security.h>
+#include <parc/security/parc_PublicKeySignerPkcs12Store.h>
+#include <ccnx/common/ccnx_KeystoreUtilities.h>
+
+#include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
+#include <ccnx/common/validation/ccnxValidation_CRC32C.h>
 
 LONGBOW_TEST_RUNNER(athena_InterestControl)
 {
