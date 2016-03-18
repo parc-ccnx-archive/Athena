@@ -246,6 +246,19 @@ _createReceivedContent(CCNxContentObject *preSendContent)
     return postSendContent;
 }
 
+static PARCBuffer *
+_createMessageHash(const CCNxMetaMessage *metaMessage)
+{
+    CCNxWireFormatMessage *wireFormatMessage = (CCNxWireFormatMessage *) metaMessage;
+
+    PARCCryptoHash *hash = ccnxWireFormatMessage_CreateContentObjectHash(wireFormatMessage);
+    PARCBuffer *buffer = parcBuffer_Acquire(parcCryptoHash_GetDigest(hash));
+    parcCryptoHash_Release(&hash);
+
+    return buffer;
+}
+
+
 LONGBOW_TEST_FIXTURE_SETUP(Global)
 {
     savedMemoryModule = parcMemory_SetInterface(&PARCSafeMemoryAsPARCMemory);
@@ -477,11 +490,20 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_NoRestriction)
     parcBitVector_Set(expectedReturnVector, 1);
     PARCBitVector *savedReturnVector = expectedReturnVector;
 
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent2, savedReturnVector);
+    CCNxContentObject *object2 = data->testContent2;
+    CCNxName *name2 = ccnxContentObject_GetName(object2);
+    PARCBuffer *keyId2 = ccnxContentObject_GetKeyId(object2);
+    PARCBuffer *contentId2 = _createMessageHash(object2);
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name2, keyId2, contentId2, savedReturnVector);
+    parcBuffer_Release(&contentId2);
     assertTrue(parcBitVector_NextBitSet(backLinkVector, 0), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+    CCNxContentObject *object1 = data->testContent1;
+    CCNxName *name1 = ccnxContentObject_GetName(object1);
+    PARCBuffer *keyId1 = ccnxContentObject_GetKeyId(object1);
+    PARCBuffer *contentId1 = _createMessageHash(object1);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector1), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 
@@ -495,8 +517,10 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_NoRestriction)
     assertTrue(athenaPIT_GetNumberOfTableEntries(data->testPIT) == 1, "There should be 1 PIT table entries at this point");
     assertTrue(athenaPIT_GetNumberOfPendingInterests(data->testPIT) == 2, "There should be 2 Pending Interests at this point");
 
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector12), "Expect to find match to forward to");
+
+    parcBuffer_Release(&contentId1);
     parcBitVector_Release(&backLinkVector);
 }
 
@@ -514,15 +538,30 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_KeyIdRestriction)
 
     PARCBitVector *savedReturnVector = expectedReturnVector;
 
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+    CCNxContentObject *object1 = data->testContent1;
+    CCNxName *name1 = ccnxContentObject_GetName(object1);
+    PARCBuffer *keyId1 = ccnxContentObject_GetKeyId(object1);
+    PARCBuffer *contentId1 = _createMessageHash(object1);
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
+    parcBuffer_Release(&contentId1);
     assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Expect to find no match in PIT");
     parcBitVector_Release(&backLinkVector);
 
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1Prime, savedReturnVector);
+    CCNxContentObject *object1Prime = data->testContent1Prime;
+    CCNxName *name1Prime = ccnxContentObject_GetName(object1Prime);
+    PARCBuffer *keyId1Prime = ccnxContentObject_GetKeyId(object1Prime);
+    PARCBuffer *contentId1Prime = _createMessageHash(object1Prime);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1Prime, keyId1Prime, contentId1Prime, savedReturnVector);
+    parcBuffer_Release(&contentId1Prime);
     assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Expect to find no match in PIT");
     parcBitVector_Release(&backLinkVector);
 
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1WithSig, savedReturnVector);
+    CCNxContentObject *object1WithSig = data->testContent1WithSig;
+    CCNxName *name1WithSig = ccnxContentObject_GetName(object1WithSig);
+    PARCBuffer *keyId1WithSig = ccnxContentObject_GetKeyId(object1WithSig);
+    PARCBuffer *contentId1WithSig = _createMessageHash(object1WithSig);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1WithSig, keyId1WithSig, contentId1WithSig, savedReturnVector);
+    parcBuffer_Release(&contentId1WithSig);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector1), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 }
@@ -542,11 +581,21 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_ContentHashRestriction)
 
     PARCBitVector *savedReturnVector = expectedReturnVector;
 
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1Prime, savedReturnVector);
+    CCNxContentObject *object1Prime = data->testContent1Prime;
+    CCNxName *name1Prime = ccnxContentObject_GetName(object1Prime);
+    PARCBuffer *keyId1Prime = ccnxContentObject_GetKeyId(object1Prime);
+    PARCBuffer *contentId1Prime = _createMessageHash(object1Prime);
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1Prime, keyId1Prime, contentId1Prime, savedReturnVector);
+    parcBuffer_Release(&contentId1Prime);
     assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Expect to find no match in PIT");
     parcBitVector_Release(&backLinkVector);
 
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1WithSig, savedReturnVector);
+    CCNxContentObject *object1WithSig = data->testContent1WithSig;
+    CCNxName *name1WithSig = ccnxContentObject_GetName(object1WithSig);
+    PARCBuffer *keyId1WithSig = ccnxContentObject_GetKeyId(object1WithSig);
+    PARCBuffer *contentId1WithSig = _createMessageHash(object1WithSig);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1WithSig, keyId1WithSig, contentId1WithSig, savedReturnVector);
+    parcBuffer_Release(&contentId1WithSig);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector1), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 }
@@ -576,7 +625,12 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_MultipleRestrictions)
 
     PARCBitVector *savedReturnVector = expectedReturnVector;
 
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1WithSig, savedReturnVector);
+    CCNxContentObject *object1WithSig = data->testContent1WithSig;
+    CCNxName *name1WithSig = ccnxContentObject_GetName(object1WithSig);
+    PARCBuffer *keyId1WithSig = ccnxContentObject_GetKeyId(object1WithSig);
+    PARCBuffer *contentId1WithSig = _createMessageHash(object1WithSig);
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1WithSig, keyId1WithSig, contentId1WithSig, savedReturnVector);
+    parcBuffer_Release(&contentId1WithSig);
     assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 3, "Expect to find 3 PIT matches");
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector123), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
@@ -683,8 +737,14 @@ LONGBOW_TEST_CASE(Global, athenaPIT_RemoveLink)
 
     // Should be no pending interests after remove
     assertTrue(athenaPIT_RemoveLink(data->testPIT, data->testVector1), "Expected True result from RemoveLink()");
+
+    CCNxContentObject *object1 = data->testContent1;
+    CCNxName *name1 = ccnxContentObject_GetName(object1);
+    PARCBuffer *keyId1 = ccnxContentObject_GetKeyId(object1);
+    PARCBuffer *contentId1 = _createMessageHash(object1);
     PARCBitVector *backLinkVector =
-        athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+        athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
+    parcBuffer_Release(&contentId1);
     assertTrue((int) parcBitVector_NextBitSet(backLinkVector, 0) == -1, "Expect an empty back link vector");
     parcBitVector_Release(&backLinkVector);
 
@@ -702,7 +762,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_RemoveLink)
     // Should be one pending interests after remove
     assertTrue(athenaPIT_RemoveLink(data->testPIT, data->testVector2), "Expected True result from RemoveLink()");
     backLinkVector =
-        athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+        athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector1), "Expect back link vector to equal vector2 ");
     parcBitVector_Release(&backLinkVector);
 
@@ -718,7 +778,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_RemoveLink)
     // Should be one pending interests after remove
     assertTrue(athenaPIT_RemoveLink(data->testPIT, data->testVector1), "Expected True result from RemoveLink()");
     backLinkVector =
-        athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+        athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector2), "Expect back link vector to equal vector2 ");
     parcBitVector_Release(&backLinkVector);
 }
@@ -842,7 +902,11 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetMeanEntryLifetime)
 
     parcBitVector_Set(expectedReturnVector, 1);
     PARCBitVector *savedReturnVector = expectedReturnVector;
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+    CCNxContentObject *object1 = data->testContent1;
+    CCNxName *name1 = ccnxContentObject_GetName(object1);
+    PARCBuffer *keyId1 = ccnxContentObject_GetKeyId(object1);
+    PARCBuffer *contentId1 = _createMessageHash(object1);
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
     parcBitVector_Release(&backLinkVector);
 
     meanLifetime = athenaPIT_GetMeanEntryLifetime(data->testPIT);
@@ -855,7 +919,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetMeanEntryLifetime)
     _TestClockTimeval.tv_usec += 100 * 1000;
 
     parcBitVector_Set(expectedReturnVector, 1);
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
     parcBitVector_Release(&backLinkVector);
 
     meanLifetime = athenaPIT_GetMeanEntryLifetime(data->testPIT);
@@ -865,14 +929,16 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetMeanEntryLifetime)
         addResult =
             athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
         _TestClockTimeval.tv_usec += 1000;
-        backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, data->testVector1);
+        backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, data->testVector1);
         parcBitVector_Release(&backLinkVector);
     }
     addResult =
         athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
     _TestClockTimeval.tv_usec += 201 * 1000;
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, data->testVector1);
+    backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, data->testVector1);
     parcBitVector_Release(&backLinkVector);
+
+    parcBuffer_Release(&contentId1);
 
     meanLifetime = athenaPIT_GetMeanEntryLifetime(data->testPIT);
     assertTrue(meanLifetime == 3, "Expect mean lifetime == 3ms, was %d", (int) meanLifetime);
@@ -889,7 +955,12 @@ LONGBOW_TEST_CASE(Global, athenaPIT_LinkCleanupFromMatch)
 
     parcBitVector_Set(expectedReturnVector, 1);
     PARCBitVector *savedReturnVector = expectedReturnVector;
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1, savedReturnVector);
+    CCNxContentObject *object1 = data->testContent1;
+    CCNxName *name1 = ccnxContentObject_GetName(object1);
+    PARCBuffer *keyId1 = ccnxContentObject_GetKeyId(object1);
+    PARCBuffer *contentId1 = _createMessageHash(object1);
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1, keyId1, contentId1, savedReturnVector);
+    parcBuffer_Release(&contentId1);
     parcBitVector_Release(&backLinkVector);
 
     assertTrue(athenaPIT_RemoveLink(data->testPIT, data->testVector1), "Expected True result from RemoveLink()");
@@ -1038,7 +1109,12 @@ LONGBOW_TEST_CASE(Performance, athenaPIT_Match)
     }
 
     for (size_t i = 0; i < ITERATIONS; ++i) {
-        PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->content[i], expectedReturnVector);
+        CCNxContentObject *object = data->content[i];
+        CCNxName *name = ccnxContentObject_GetName(object);
+        PARCBuffer *keyId = ccnxContentObject_GetKeyId(object);
+        PARCBuffer *contentId = _createMessageHash(object);
+        PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name, keyId, contentId, expectedReturnVector);
+        parcBuffer_Release(&contentId);
         parcBitVector_Release(&backLinkVector);
     }
 }
@@ -1076,8 +1152,14 @@ LONGBOW_TEST_CASE(Performance, athenaPIT_Add_Remove)
         AthenaPITResolution addResult =
             athenaPIT_AddInterest(data->testPIT, data->interests[1], data->ingressVectors[1], &expectedReturnVector);
         assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
-        PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->content[1], expectedReturnVector);
+
+        CCNxContentObject *object = data->content[1];
+        CCNxName *name = ccnxContentObject_GetName(object);
+        PARCBuffer *keyId = ccnxContentObject_GetKeyId(object);
+        PARCBuffer *contentId = _createMessageHash(object);
+        PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name, keyId, contentId, expectedReturnVector);
         parcBitVector_Release(&backLinkVector);
+        parcBuffer_Release(&contentId);
     }
     int delta1 = (int) (parcClock_GetTime(clock) - start);
 
@@ -1086,8 +1168,14 @@ LONGBOW_TEST_CASE(Performance, athenaPIT_Add_Remove)
         AthenaPITResolution addResult =
             athenaPIT_AddInterest(data->testPIT, data->interests[1], data->ingressVectors[1], &expectedReturnVector);
         assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
-        PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->content[1], expectedReturnVector);
+
+        CCNxContentObject *object = data->content[1];
+        CCNxName *name = ccnxContentObject_GetName(object);
+        PARCBuffer *keyId = ccnxContentObject_GetKeyId(object);
+        PARCBuffer *contentId = _createMessageHash(object);
+        PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name, keyId, contentId, expectedReturnVector);
         parcBitVector_Release(&backLinkVector);
+        parcBuffer_Release(&contentId);
     }
     int delta2 = (int) (parcClock_GetTime(clock) - start);
 

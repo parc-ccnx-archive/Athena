@@ -191,7 +191,9 @@ bool athenaPIT_RemoveInterest(AthenaPIT *athenaPIT,
  * @endcode
  */
 PARCBitVector *athenaPIT_Match(AthenaPIT *athenaPIT,
-                               const CCNxContentObject *ccnxContentMessage,
+                               const CCNxName *name,
+                               const PARCBuffer *keyId,
+                               const PARCBuffer *contentId,
                                const PARCBitVector *ingressVector);
 
 /**

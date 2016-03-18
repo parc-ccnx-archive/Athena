@@ -44,6 +44,7 @@
 #include <ccnx/common/ccnx_Interest.h>
 #include <ccnx/common/ccnx_InterestReturn.h>
 #include <ccnx/common/ccnx_ContentObject.h>
+#include <ccnx/common/ccnx_Manifest.h>
 
 #include <ccnx/common/validation/ccnxValidation_CRC32C.h>
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
@@ -254,13 +255,34 @@ _processInterestReturn(Athena *athena, CCNxInterestReturn *interestReturn, PARCB
     // otherwise, may try another forwarding path or clear the PIT state and forward the interest return on the reverse path
 }
 
+static PARCBuffer *
+_createMessageHash(const CCNxMetaMessage *metaMessage)
+{
+    // We need to interact with the content message as a WireFormatMessage to get to
+    // the content hash API.
+    CCNxWireFormatMessage *wireFormatMessage = (CCNxWireFormatMessage *) metaMessage;
+
+    PARCCryptoHash *hash = ccnxWireFormatMessage_CreateContentObjectHash(wireFormatMessage);
+    if (hash != NULL) {
+        PARCBuffer *buffer = parcBuffer_Acquire(parcCryptoHash_GetDigest(hash));
+        parcCryptoHash_Release(&hash);
+        return buffer;
+    } else {
+        return NULL;
+    }
+}
+
 static void
 _processContentObject(Athena *athena, CCNxContentObject *contentObject, PARCBitVector *ingressVector)
 {
     //
     // *   (1) If it does not match anything in the PIT, drop it
     //
-    PARCBitVector *egressVector = athenaPIT_Match(athena->athenaPIT, contentObject, ingressVector);
+    CCNxName *name = ccnxContentObject_GetName(contentObject);
+    PARCBuffer *keyId = ccnxContentObject_GetKeyId(contentObject);
+    PARCBuffer *digest = _createMessageHash(contentObject);
+
+    PARCBitVector *egressVector = athenaPIT_Match(athena->athenaPIT, name, keyId, digest, ingressVector);
     if (egressVector) {
         if (parcBitVector_NumberOfBitsSet(egressVector) > 0) {
             //
@@ -275,6 +297,40 @@ _processContentObject(Athena *athena, CCNxContentObject *contentObject, PARCBitV
             parcLog_Debug(athena->log, "Content Object forwarded to %s.", egressVectorString);
             parcMemory_Deallocate(&egressVectorString);
             PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, contentObject, egressVector);
+            if (result) {
+                // if there are failed channels, client will resend interest unless we wish to retry here
+                parcBitVector_Release(&result);
+            }
+        }
+        parcBitVector_Release(&egressVector);
+    }
+}
+
+static void
+_processManifest(Athena *athena, CCNxManifest *manifest, PARCBitVector *ingressVector)
+{
+    //
+    // *   (1) If it does not match anything in the PIT, drop it
+    //
+    CCNxName *name = ccnxManifest_GetName(manifest);
+    PARCBuffer *digest = _createMessageHash(manifest);
+
+    PARCBitVector *egressVector = athenaPIT_Match(athena->athenaPIT, name, NULL, digest, ingressVector);
+    if (egressVector) {
+        if (parcBitVector_NumberOfBitsSet(egressVector) > 0) {
+            //
+            // *   (2) Add to the Content Store
+            //
+            athenaContentStore_PutContentObject(athena->athenaContentStore, manifest);
+            // _athenaPIT_RemoveInterestFromMap
+
+            //
+            // *   (3) Reverse path forward it via PIT entries
+            //
+            const char *egressVectorString = parcBitVector_ToString(egressVector);
+            parcLog_Debug(athena->log, "Manifest forwarded to %s.", egressVectorString);
+            parcMemory_Deallocate(&egressVectorString);
+            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, manifest, egressVector);
             if (result) {
                 // if there are failed channels, client will resend interest unless we wish to retry here
                 parcBitVector_Release(&result);
@@ -315,6 +371,12 @@ athena_ProcessMessage(Athena *athena, CCNxMetaMessage *ccnxMessage, PARCBitVecto
         CCNxInterestReturn *interestReturn = ccnxMetaMessage_GetInterestReturn(ccnxMessage);
         _processInterestReturn(athena, interestReturn, ingressVector);
         athena->stats.numProcessedInterestReturns++;
+    } else if (ccnxMetaMessage_IsManifest(ccnxMessage)) {
+        parcLog_Debug(athena->log, "Processing Interest Return Message");
+
+        CCNxManifest *manifest = ccnxMetaMessage_GetManifest(ccnxMessage);
+        _processManifest(athena, manifest, ingressVector);
+        athena->stats.numProcessedManifests++;
     } else {
         trapUnexpectedState("Invalid CCNxMetaMessage type");
     }
