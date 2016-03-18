@@ -86,6 +86,7 @@ _create_identity()
 
     PARCIdentityFile *identityFile = parcIdentityFile_Create("my_keystore", "my_keystore_password");
     PARCIdentity *identity = parcIdentity_Create(identityFile, PARCIdentityFileAsPARCIdentity);
+    parcIdentityFile_Release(&identityFile);
     return identity;
 }
 
