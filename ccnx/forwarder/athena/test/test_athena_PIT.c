@@ -163,6 +163,7 @@ LONGBOW_TEST_FIXTURE(Global)
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_Match_NoRestriction);
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_Match_KeyIdRestriction);
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_Match_ContentHashRestriction);
+    LONGBOW_RUN_TEST_CASE(Global, athenaPIT_Match_Nameless);
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_Match_MultipleRestrictions);
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_CreateCapacity);
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_PurgeExpired);
@@ -182,10 +183,14 @@ typedef struct test_data {
     CCNxInterest *testInterest1WithKeyId;
     CCNxInterest *testInterest1WithContentId;
     CCNxInterest *testInterest2;
+    CCNxInterest *testNamelessInterest;
+
     CCNxContentObject *testContent1;
+    CCNxContentObject *testNamelessContent;
     CCNxContentObject *testContent1Prime;
     CCNxContentObject *testContent1WithSig;
     CCNxContentObject *testContent2;
+
     PARCBitVector *testVector1;
     PARCBitVector *testVector2;
     PARCBitVector *testVector3;
@@ -256,24 +261,31 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     data->testPIT = athenaPIT_Create();
 
     // Content 1
-    CCNxName *name = ccnxName_CreateFromCString("lci:/test/content");
+    CCNxName *name = ccnxName_CreateFromCString("ccnx:/test/content");
     PARCBuffer *payload = parcBuffer_WrapCString("Some really hot payload 1");
 
-    CCNxContentObject *preSendCO = ccnxContentObject_CreateWithDataPayload(name, payload);
+    CCNxContentObject *preSendCO = ccnxContentObject_CreateWithNameAndPayload(name, payload);
     data->testContent1 = _createReceivedContent(preSendCO);
     ccnxContentObject_Release(&preSendCO);
     parcBuffer_Release(&payload);
 
+    // Nameless Content 1
+    PARCBuffer *namelessPayload = parcBuffer_WrapCString("Some really super hot payload for a nameless object");
+    preSendCO = ccnxContentObject_CreateWithPayload(namelessPayload);
+    data->testNamelessContent = _createReceivedContent(preSendCO);
+    ccnxContentObject_Release(&preSendCO);
+    parcBuffer_Release(&namelessPayload);
+
     // Content 1 Prime
     PARCBuffer *payloadPrime = parcBuffer_WrapCString("Some really hot payload 1 prime");
-    preSendCO = ccnxContentObject_CreateWithDataPayload(name, payloadPrime);
+    preSendCO = ccnxContentObject_CreateWithNameAndPayload(name, payloadPrime);
     parcBuffer_Release(&payloadPrime);
     data->testContent1Prime = _createReceivedContent(preSendCO);
     ccnxContentObject_Release(&preSendCO);
 
     // Content 1 With Sig
     payload = parcBuffer_WrapCString("Some really hot payload 1");
-    preSendCO = ccnxContentObject_CreateWithDataPayload(name, payload);
+    preSendCO = ccnxContentObject_CreateWithNameAndPayload(name, payload);
     parcBuffer_Release(&payload);
 
     PARCBuffer *keyId = parcBuffer_WrapCString("keyhash");
@@ -297,20 +309,25 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     data->testInterest1WithContentId = _createTestInterest(name, keyId, parcCryptoHash_GetDigest(contentHash));
     parcCryptoHash_Release(&contentHash);
 
+    // Interest for Nameless Content Object
+    contentHash = ccnxWireFormatMessage_CreateContentObjectHash(data->testNamelessContent);
+    data->testNamelessInterest = _createTestInterest(name, keyId, parcCryptoHash_GetDigest(contentHash));
+    parcCryptoHash_Release(&contentHash);
+
     parcBuffer_Release(&keyId);
     ccnxName_Release(&name);
 
     // Content 2
-    name = ccnxName_CreateFromCString("lci:/test/content2");
+    name = ccnxName_CreateFromCString("ccnx:/test/content2");
     payload = parcBuffer_WrapCString("Some really hot payload 2");
-    preSendCO = ccnxContentObject_CreateWithDataPayload(name, payload);
+    preSendCO = ccnxContentObject_CreateWithNameAndPayload(name, payload);
     data->testContent2 = _createReceivedContent(preSendCO);
     ccnxContentObject_Release(&preSendCO);
     parcBuffer_Release(&payload);
     ccnxName_Release(&name);
 
     // Interest 2
-    name = ccnxName_CreateFromCString("lci:/test/content2");
+    name = ccnxName_CreateFromCString("ccnx:/test/content2");
     data->testInterest2 = _createTestInterest(name, NULL, NULL);
     ccnxName_Release(&name);
 
@@ -343,8 +360,10 @@ LONGBOW_TEST_FIXTURE_TEARDOWN(Global)
     ccnxInterest_Release((&data->testInterest1WithKeyId));
     ccnxInterest_Release((&data->testInterest1WithContentId));
     ccnxInterest_Release((&data->testInterest2));
+    ccnxInterest_Release((&data->testNamelessInterest));
 
     ccnxContentObject_Release(&data->testContent1);
+    ccnxContentObject_Release(&data->testNamelessContent);
     ccnxContentObject_Release(&data->testContent1Prime);
     ccnxContentObject_Release(&data->testContent1WithSig);
     ccnxContentObject_Release(&data->testContent2);
@@ -551,6 +570,31 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_ContentHashRestriction)
     parcBitVector_Release(&backLinkVector);
 }
 
+LONGBOW_TEST_CASE(Global, athenaPIT_Match_Nameless)
+{
+    TestData *data = longBowTestCase_GetClipBoardData(testCase);
+
+    PARCBitVector *expectedReturnVector;
+
+    // Match with ContentId
+    AthenaPITResolution addResult =
+            athenaPIT_AddInterest(data->testPIT, data->testNamelessInterest, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
+
+    parcBitVector_Set(expectedReturnVector, 1);
+
+    PARCBitVector *savedReturnVector = expectedReturnVector;
+
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1Prime, savedReturnVector);
+    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Expect to find no match in PIT");
+    parcBitVector_Release(&backLinkVector);
+
+    backLinkVector = athenaPIT_Match(data->testPIT, data->testNamelessContent, savedReturnVector);
+    assertTrue(parcBitVector_Equals(backLinkVector, data->testVector1), "Expect to find match to forward to");
+    parcBitVector_Release(&backLinkVector);
+}
+
+
 LONGBOW_TEST_CASE(Global, athenaPIT_Match_MultipleRestrictions)
 {
     TestData *data = longBowTestCase_GetClipBoardData(testCase);
@@ -753,7 +797,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfTableEntries)
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
     tableEntries = athenaPIT_GetNumberOfTableEntries(data->testPIT);
-    assertTrue(tableEntries == 3, "Expect 3 table entry at this point");
+    assertTrue(tableEntries == 4, "Expect 3 table entry at this point");
 
     // Aggregation of testInterest1
     parcBitVector_Set(expectedReturnVector, 5);
@@ -762,7 +806,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfTableEntries)
     assertTrue(addResult == AthenaPITResolution_Aggregated, "Expect AddInterest() result to be Aggregated");
 
     tableEntries = athenaPIT_GetNumberOfTableEntries(data->testPIT);
-    assertTrue(tableEntries == 3, "Expect 3 table entry at this point");
+    assertTrue(tableEntries == 4, "Expect 3 table entry at this point");
 
     // Duplicate of testInterest1
     addResult =
@@ -770,7 +814,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfTableEntries)
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
     tableEntries = athenaPIT_GetNumberOfTableEntries(data->testPIT);
-    assertTrue(tableEntries == 3, "Expect 1 table entry at this point");
+    assertTrue(tableEntries == 4, "Expect 1 table entry at this point");
 }
 
 LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfPendingInterests)
@@ -974,14 +1018,14 @@ LONGBOW_TEST_FIXTURE_SETUP(Performance)
 
     CCNxName *name = NULL;
     PARCBuffer *payload = parcBuffer_WrapCString("Some Payload");
-    const char *lciPrefix = "lci:/";
+    const char *lciPrefix = "ccnx:/";
     char uri[30];
     srand((uint32_t) parcClock_GetTime(data->testPIT->clock));
     for (size_t i = 0; i < ITERATIONS; ++i) {
         sprintf(uri, "%s%d", lciPrefix, rand());
         name = ccnxName_CreateFromCString(uri);
         data->interests[i] = _createTestInterest(name, NULL, NULL);
-        CCNxContentObject *psObject = ccnxContentObject_CreateWithDataPayload(name, payload);
+        CCNxContentObject *psObject = ccnxContentObject_CreateWithNameAndPayload(name, payload);
         data->content[i] = _createReceivedContent(psObject);
         ccnxContentObject_Release(&psObject);
         ccnxName_Release(&name);

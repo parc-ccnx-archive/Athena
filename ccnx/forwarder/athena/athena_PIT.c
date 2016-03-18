@@ -271,7 +271,9 @@ _athenaPIT_createCompoundKey(const CCNxName *name, const PARCBuffer *buffer)
 {
     PARCBufferComposer *composer = parcBufferComposer_Create();
 
-    composer = ccnxName_BuildString(name, composer);
+    if (name != NULL) {
+        composer = ccnxName_BuildString(name, composer);
+    }
 
     if (buffer != NULL) {
         parcBufferComposer_PutBuffer(composer, buffer);
@@ -492,12 +494,11 @@ athenaPIT_AddInterest(AthenaPIT *athenaPIT,
     uint64_t now = parcClock_GetTime(athenaPIT->clock);
     expiration += now;
 
-    //Get the most restrictive key
+    // Get the most restrictive key
     PARCBuffer *key = _athenaPIT_acquireInterestKey(ccnxInterestMessage);
-
     _AthenaPITEntry *entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
 
-    if (entry == NULL) { //New PIT entry
+    if (entry == NULL) { // New PIT entry
         // Make sure we don't exceed our desired limit
         if (parcHashMap_Size(athenaPIT->entryTable) >= athenaPIT->capacity) {
             // Try and free up some entries
@@ -507,10 +508,9 @@ athenaPIT_AddInterest(AthenaPIT *athenaPIT,
         if (parcHashMap_Size(athenaPIT->entryTable) < athenaPIT->capacity) {
             PARCBitVector *newEgressVector = parcBitVector_Create();
 
+            // Add the default entry which contains the Interest name
             _AthenaPITEntry *newEntry =
                 _athenaPITEntry_Create(key, ccnxInterestMessage, ingressVector, newEgressVector, expiration, now);
-
-            parcBitVector_Release(&newEgressVector);
 
             parcHashMap_Put(athenaPIT->entryTable, key, newEntry);
             ++athenaPIT->interestCount;
@@ -520,7 +520,24 @@ athenaPIT_AddInterest(AthenaPIT *athenaPIT,
 
             entry = newEntry;
 
+            // Add an entry without a name, but only if a ContentObjectHashRestriction was provided
+            const PARCBuffer *contentId = ccnxInterest_GetContentObjectHashRestriction(ccnxInterestMessage);
+            if (contentId != NULL) {
+                PARCBuffer *namelessKey = _athenaPIT_createCompoundKey(NULL, contentId);
+
+                _AthenaPITEntry *namelessEntry =
+                        _athenaPITEntry_Create(namelessKey, ccnxInterestMessage, ingressVector, newEgressVector, expiration, now);
+                parcHashMap_Put(athenaPIT->entryTable, namelessKey, namelessEntry);
+
+                _athenaPIT_addInterestToLinkCleanupList(athenaPIT, ingressVector, namelessEntry);
+                _athenaPIT_addInterestToTimeoutTable(athenaPIT, expiration, namelessEntry);
+
+                _athenaPITEntry_Release(&namelessEntry);
+                parcBuffer_Release(&namelessKey);
+            }
+
             _athenaPITEntry_Release(&newEntry);
+            parcBitVector_Release(&newEgressVector);
             result = AthenaPITResolution_Forward;
         }
     } else if (parcBitVector_Contains(entry->ingress, ingressVector)) {
@@ -609,10 +626,10 @@ athenaPIT_RemoveInterest(AthenaPIT *athenaPIT,
     return result;
 }
 
-PARCBitVector *
-athenaPIT_Match(AthenaPIT *athenaPIT,
-                const CCNxContentObject *ccnxContentMessage,
-                const PARCBitVector *ingressVector)
+static PARCBitVector *
+_athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
+                        const CCNxContentObject *ccnxContentMessage,
+                        const PARCBitVector *ingressVector)
 {
     //TODO: Add egress check.
 
@@ -684,6 +701,49 @@ athenaPIT_Match(AthenaPIT *athenaPIT,
         parcBuffer_Release(&key);
     }
     return result;
+}
+
+static PARCBitVector *
+_athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
+                         const CCNxContentObject *ccnxContentMessage,
+                         const PARCBitVector *ingressVector)
+{
+    PARCBitVector *result = parcBitVector_Create();
+
+    PARCCryptoHash *contentId = _createContentObjectHash(ccnxContentMessage);
+    if (contentId != NULL) {
+        PARCBuffer *key = _athenaPIT_createCompoundKey(NULL, parcCryptoHash_GetDigest(contentId));
+        _AthenaPITEntry *entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
+        parcCryptoHash_Release(&contentId);
+
+        if (entry != NULL) {
+            uint64_t now = parcClock_GetTime(athenaPIT->clock);
+            _athenaPIT_AddLifetimeStat(athenaPIT, _athenaPITEntry_Age(entry, now));
+            parcBitVector_SetVector(result, entry->ingress);
+
+            // Remove Match
+            _athenaPIT_removeInterestFromCleanupList(athenaPIT, entry->ingress, key);
+            parcHashMap_Remove(athenaPIT->entryTable, key);
+            _athenaPIT_removeInterestFromTimeoutTable(athenaPIT, entry);
+            athenaPIT->interestCount -= parcBitVector_NumberOfBitsSet(result);
+        }
+        parcBuffer_Release(&key);
+    }
+
+    return result;
+}
+
+PARCBitVector *
+athenaPIT_Match(AthenaPIT *athenaPIT,
+                const CCNxContentObject *ccnxContentMessage,
+                const PARCBitVector *ingressVector)
+{
+    CCNxName *name = ccnxContentObject_GetName(ccnxContentMessage);
+    if (name == NULL) {
+        return _athenaPIT_MatchNameless(athenaPIT, ccnxContentMessage, ingressVector);
+    } else {
+        return _athenaPIT_MatchWithName(athenaPIT, ccnxContentMessage, ingressVector);
+    }
 }
 
 bool
@@ -880,7 +940,7 @@ athenaPIT_ProcessMessage(const AthenaPIT *athenaPIT, const CCNxMetaMessage *mess
         }
 
         if (responsePayload != NULL) {
-            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithDataPayload(ccnxInterest_GetName(interest), responsePayload);
+            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithNameAndPayload(ccnxInterest_GetName(interest), responsePayload);
 
             result = ccnxMetaMessage_CreateFromContentObject(contentObjectResponse);
 

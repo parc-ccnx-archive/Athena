@@ -170,7 +170,7 @@ _createContentObject(char *lci, uint64_t chunkNum, PARCBuffer *payload)
     CCNxNameSegment *chunkSegment = ccnxNameSegmentNumber_Create(CCNxNameLabelType_CHUNK, chunkNum);
     ccnxName_Append(name, chunkSegment);
 
-    CCNxContentObject *result = ccnxContentObject_CreateWithDataPayload(name, payload);
+    CCNxContentObject *result = ccnxContentObject_CreateWithNameAndPayload(name, payload);
 
     ccnxName_Release(&name);
     ccnxNameSegment_Release(&chunkSegment);
@@ -295,7 +295,7 @@ LONGBOW_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByName)
     PARCBuffer *payload = parcBuffer_Allocate(500);
 
     CCNxName *name = ccnxName_CreateFromCString("lci:/boose/roo/pie");
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(name, payload);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(name, payload);
     parcBuffer_Release(&payload);
 
     bool status = _athenaLRUContentStore_PutContentObject(impl, contentObject);
@@ -303,7 +303,7 @@ LONGBOW_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByName)
 
     PARCBuffer *payload2 = parcBuffer_Allocate(500);
     CCNxName *name2 = ccnxName_CreateFromCString("lci:/roo/pie/boose");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, payload2);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, payload2);
     parcBuffer_Release(&payload2);
 
     bool status2 = _athenaLRUContentStore_PutContentObject(impl, contentObject2);
@@ -349,7 +349,7 @@ LONGBOW_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndKeyId)
     PARCBuffer *payload = parcBuffer_Allocate(1200);
 
     CCNxName *name = ccnxName_CreateFromCString("lci:/boose/roo/pie");
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
 
     parcBuffer_Release(&payload);
     _AthenaLRUContentStoreEntry *entry1 = _athenaLRUContentStoreEntry_Create(contentObject);
@@ -362,7 +362,7 @@ LONGBOW_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndKeyId)
 
     // Now add another content object with the same name, but a KeyId too.
 
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
 
     _AthenaLRUContentStoreEntry *entry2 = _athenaLRUContentStoreEntry_Create(contentObject2);
 
@@ -401,7 +401,7 @@ LONGBOW_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndObjectHash)
     PARCBuffer *payload = parcBuffer_Allocate(1200);
 
     CCNxName *name = ccnxName_CreateFromCString("lci:/boose/roo/pie");
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
 
     parcBuffer_Release(&payload);
     _AthenaLRUContentStoreEntry *entry1 = _athenaLRUContentStoreEntry_Create(contentObject);
@@ -414,7 +414,7 @@ LONGBOW_TEST_CASE(Local, _athenaLRUContentStore_GetMatchByNameAndObjectHash)
 
     // Now add another content object with the same name, but an object hash too.
 
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
 
     _AthenaLRUContentStoreEntry *entry2 = _athenaLRUContentStoreEntry_Create(contentObject2);
 
@@ -451,19 +451,19 @@ LONGBOW_TEST_CASE(Local, _moveContentStoreEntryToLRUHead)
     AthenaLRUContentStore *impl = _createLRUContentStore();
 
     CCNxName *name = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
     ccnxName_Release(&name);
 
     name = ccnxName_CreateFromCString("lci:/second/entry");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
     ccnxName_Release(&name);
 
     name = ccnxName_CreateFromCString("lci:/third/entry");
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
     ccnxName_Release(&name);
 
     name = ccnxName_CreateFromCString("lci:/fourth/entry");
-    CCNxContentObject *contentObject4 = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject4 = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
     ccnxName_Release(&name);
 
     bool status = _athenaLRUContentStore_PutContentObject(impl, contentObject1);
@@ -515,13 +515,13 @@ LONGBOW_TEST_CASE(Local, _getLeastUsedFromLRU)
     AthenaLRUContentStore *impl = _createLRUContentStore();
 
     CCNxName *name1 = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, NULL);
 
     CCNxName *name2 = ccnxName_CreateFromCString("lci:/second/entry");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, NULL);
 
     CCNxName *name3 = ccnxName_CreateFromCString("lci:/third/entry");
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name3, NULL);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name3, NULL);
 
     bool status = _athenaLRUContentStore_PutContentObject(impl, contentObject1);
     assertTrue(status, "Exepected to insert content");
@@ -559,13 +559,13 @@ LONGBOW_TEST_CASE(Local, _getLeastUsedFromLRU)
 LONGBOW_TEST_CASE(Local, _compareByExpiryTime)
 {
     CCNxName *name1 = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, NULL);
 
     CCNxName *name2 = ccnxName_CreateFromCString("lci:/second/entry");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, NULL);
 
     CCNxName *name3 = ccnxName_CreateFromCString("lci:/third/entry");
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name3, NULL);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name3, NULL);
 
     ccnxContentObject_SetExpiryTime(contentObject1, 100);
     ccnxContentObject_SetExpiryTime(contentObject2, 200);
@@ -598,13 +598,13 @@ LONGBOW_TEST_CASE(Local, _compareByExpiryTime)
 LONGBOW_TEST_CASE(Local, _compareByRecommendedCacheTime)
 {
     CCNxName *name1 = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, NULL);
 
     CCNxName *name2 = ccnxName_CreateFromCString("lci:/second/entry");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, NULL);
 
     CCNxName *name3 = ccnxName_CreateFromCString("lci:/third/entry");
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name3, NULL);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name3, NULL);
 
 
     _AthenaLRUContentStoreEntry *entry1 = _athenaLRUContentStoreEntry_Create(contentObject1);
@@ -647,13 +647,13 @@ LONGBOW_TEST_CASE(Local, putWithExpiryTime)
     AthenaLRUContentStore *impl = _createLRUContentStore();
 
     CCNxName *name1 = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, NULL);
 
     CCNxName *name2 = ccnxName_CreateFromCString("lci:/second/entry");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, NULL);
 
     CCNxName *name3 = ccnxName_CreateFromCString("lci:/third/entry");
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name3, NULL);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name3, NULL);
 
     uint64_t now = parcClock_GetTime(impl->wallClock);
 
@@ -708,13 +708,13 @@ LONGBOW_TEST_CASE(Local, putWithExpiryTime_Expired)
     AthenaLRUContentStore *impl = _createLRUContentStore();
 
     CCNxName *name1 = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, NULL);
 
     CCNxName *name2 = ccnxName_CreateFromCString("lci:/second/entry");
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, NULL);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, NULL);
 
     CCNxName *name3 = ccnxName_CreateFromCString("lci:/third/entry");
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name3, NULL);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name3, NULL);
 
     uint64_t now = parcClock_GetTime(impl->wallClock);
 
@@ -811,7 +811,7 @@ LONGBOW_TEST_CASE(Local, putContentAndExpireByExpiryTime)
     CCNxName *name3 = ccnxName_CreateFromCString("lci:/object/3");
     CCNxName *name4 = ccnxName_CreateFromCString("lci:/object/4");
 
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, payload);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, payload);
     _AthenaLRUContentStoreEntry *entry = _athenaLRUContentStoreEntry_Create(contentObject1);
     entry->hasExpiryTime = true;
     entry->expiryTime = now + 2000000;
@@ -819,7 +819,7 @@ LONGBOW_TEST_CASE(Local, putContentAndExpireByExpiryTime)
     _athenaLRUContentStoreEntry_Release(&entry);
     assertTrue(status, "Expected to put the content in the store");
 
-    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithDataPayload(name2, payload);
+    CCNxContentObject *contentObject2 = ccnxContentObject_CreateWithNameAndPayload(name2, payload);
     entry = _athenaLRUContentStoreEntry_Create(contentObject2);
     entry->expiryTime = now - 10000; // This one expires first. (it's already expired)
     entry->hasExpiryTime = true;
@@ -827,7 +827,7 @@ LONGBOW_TEST_CASE(Local, putContentAndExpireByExpiryTime)
     _athenaLRUContentStoreEntry_Release(&entry);
     assertTrue(status, "Expected to put the content in the store");
 
-    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithDataPayload(name3, payload);
+    CCNxContentObject *contentObject3 = ccnxContentObject_CreateWithNameAndPayload(name3, payload);
     entry = _athenaLRUContentStoreEntry_Create(contentObject3);
     entry->expiryTime = now + 3000000;
     entry->hasExpiryTime = true;
@@ -838,7 +838,7 @@ LONGBOW_TEST_CASE(Local, putContentAndExpireByExpiryTime)
     // At this point, there are three items in the store. Try to put in a 4th, which should force the one
     // with the earliest expiration time to be expired.
 
-    CCNxContentObject *contentObject4 = ccnxContentObject_CreateWithDataPayload(name4, payload);
+    CCNxContentObject *contentObject4 = ccnxContentObject_CreateWithNameAndPayload(name4, payload);
     entry = _athenaLRUContentStoreEntry_Create(contentObject4);
     entry->expiryTime = now + 3000000;
     entry->hasExpiryTime = true;
@@ -1011,7 +1011,7 @@ LONGBOW_TEST_CASE(Loca, _createHashableKey_NameAndObjectHash)
 LONGBOW_TEST_CASE(Local, _athenaLRUContentStoreEntry_Display)
 {
     CCNxName *name1 = ccnxName_CreateFromCString("lci:/first/entry");
-    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithDataPayload(name1, NULL);
+    CCNxContentObject *contentObject1 = ccnxContentObject_CreateWithNameAndPayload(name1, NULL);
 
     ccnxContentObject_SetExpiryTime(contentObject1, 87654321);
     _AthenaLRUContentStoreEntry *entry1 = _athenaLRUContentStoreEntry_Create(contentObject1);
@@ -1028,7 +1028,7 @@ LONGBOW_TEST_CASE(Local, getMatch_Expired)
     AthenaLRUContentStore *impl = _createLRUContentStore();
 
     CCNxName *name = ccnxName_CreateFromCString("lci:/boose/roo/pie");
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(name, NULL);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(name, NULL);
 
     _AthenaLRUContentStoreEntry *entry = _athenaLRUContentStoreEntry_Create(contentObject);
     ccnxContentObject_Release(&contentObject);
@@ -1251,5 +1251,3 @@ main(int argc, char *argv[argc])
     longBowTestRunner_Destroy(&testRunner);
     exit(exitStatus);
 }
-
-

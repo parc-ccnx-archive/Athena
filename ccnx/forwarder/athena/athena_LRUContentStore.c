@@ -1064,7 +1064,7 @@ _athenaLRUContentStore_ProcessMessage(AthenaContentStoreImplementation *store, c
         }
 
         if (responsePayload != NULL) {
-            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithDataPayload(
+            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithNameAndPayload(
                 ccnxInterest_GetName(interest), responsePayload);
 
             result = ccnxMetaMessage_CreateFromContentObject(contentObjectResponse);
@@ -1094,4 +1094,3 @@ AthenaContentStoreInterface AthenaContentStore_LRUImplementation = {
 
     .processMessage   = _athenaLRUContentStore_ProcessMessage
 };
-

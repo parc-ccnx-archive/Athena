@@ -107,7 +107,7 @@ _createContentObject(char *lci, uint64_t chunkNum, PARCBuffer *payload)
     CCNxNameSegment *chunkSegment = ccnxNameSegmentNumber_Create(CCNxNameLabelType_CHUNK, chunkNum);
     ccnxName_Append(name, chunkSegment);
 
-    CCNxContentObject *result = ccnxContentObject_CreateWithDataPayload(name, payload);
+    CCNxContentObject *result = ccnxContentObject_CreateWithNameAndPayload(name, payload);
 
     ccnxName_Release(&name);
     ccnxNameSegment_Release(&chunkSegment);
@@ -153,7 +153,7 @@ LONGBOW_TEST_CASE(Global, removeMatch)
     char *lci = "lci:/cakes/and/pies";
 
     CCNxName *origName = ccnxName_CreateFromCString(lci);
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(origName, NULL);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(origName, NULL);
 
     ccnxContentObject_SetExpiryTime(contentObject, parcClock_GetTime(clock) + 100);
     ccnxName_Release(&origName);
@@ -182,7 +182,7 @@ LONGBOW_TEST_CASE(Global, getMatchByName)
     PARCClock *clock = parcClock_Wallclock();
 
     CCNxName *truthName = ccnxName_CreateFromCString(lci);
-    CCNxContentObject *truthObject = ccnxContentObject_CreateWithDataPayload(truthName, NULL);
+    CCNxContentObject *truthObject = ccnxContentObject_CreateWithNameAndPayload(truthName, NULL);
     ccnxContentObject_SetExpiryTime(truthObject, parcClock_GetTime(clock) + 100);
     ccnxName_Release(&truthName);
 

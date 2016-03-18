@@ -980,7 +980,7 @@ _create_linkList_response(AthenaTransportLinkAdapter *athenaTransportLinkAdapter
     PARCBuffer *payload = parcBuffer_CreateFromArray(jsonString, strlen(jsonString));
 
     CCNxContentObject *contentObject =
-        ccnxContentObject_CreateWithDataPayload(ccnxName, parcBuffer_Flip(payload));
+        ccnxContentObject_CreateWithNameAndPayload(ccnxName, parcBuffer_Flip(payload));
 
     struct timeval tv;
     gettimeofday(&tv, NULL);

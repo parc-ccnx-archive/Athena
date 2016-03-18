@@ -112,7 +112,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessInterest)
     ccnxNameSegment_Release(&chunkSegment);
 
     PARCBuffer *payload = parcBuffer_WrapCString("this is a payload");
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(name, payload);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(name, payload);
     parcBuffer_Release(&payload);
 
     struct timeval tv;
@@ -199,7 +199,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessContentObject)
     ccnxNameSegment_Release(&chunkSegment);
 
     PARCBuffer *payload = parcBuffer_WrapCString("this is a payload");
-    CCNxContentObject *contentObject = ccnxContentObject_CreateWithDataPayload(name, payload);
+    CCNxContentObject *contentObject = ccnxContentObject_CreateWithNameAndPayload(name, payload);
 
     ccnxName_Release(&name);
     parcBuffer_Release(&payload);
