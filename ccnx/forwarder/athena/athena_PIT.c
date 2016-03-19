@@ -626,6 +626,25 @@ athenaPIT_RemoveInterest(AthenaPIT *athenaPIT,
     return result;
 }
 
+static void
+_athenaPIT_LookupKey(AthenaPIT *athenaPIT, PARCBuffer *key, PARCBitVector *egressVector)
+{
+    _AthenaPITEntry *entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
+
+    // We have an entry, set the match vector and remove
+    if (entry != NULL) {
+        uint64_t now = parcClock_GetTime(athenaPIT->clock);
+        _athenaPIT_AddLifetimeStat(athenaPIT, _athenaPITEntry_Age(entry, now));
+        parcBitVector_SetVector(egressVector, entry->ingress);
+
+        // Remove Match
+        _athenaPIT_removeInterestFromCleanupList(athenaPIT, entry->ingress, key);
+        parcHashMap_Remove(athenaPIT->entryTable, key);
+        _athenaPIT_removeInterestFromTimeoutTable(athenaPIT, entry);
+        athenaPIT->interestCount -= parcBitVector_NumberOfBitsSet(egressVector);
+    }
+}
+
 static PARCBitVector *
 _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
                         const CCNxContentObject *ccnxContentMessage,
@@ -639,67 +658,28 @@ _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
 
     // Match based on Name alone
     PARCBuffer *key = _athenaPIT_createCompoundKey(name, NULL);
-    _AthenaPITEntry *entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
-
-    // We have an entry, set the match vector and remove
-    if (entry != NULL) {
-        uint64_t now = parcClock_GetTime(athenaPIT->clock);
-        _athenaPIT_AddLifetimeStat(athenaPIT, _athenaPITEntry_Age(entry, now));
-        parcBitVector_SetVector(result, entry->ingress);
-
-        // Remove Match
-        _athenaPIT_removeInterestFromCleanupList(athenaPIT, entry->ingress, key);
-        parcHashMap_Remove(athenaPIT->entryTable, key);
-        _athenaPIT_removeInterestFromTimeoutTable(athenaPIT, entry);
-        athenaPIT->interestCount -= parcBitVector_NumberOfBitsSet(result);
-    }
+    _athenaPIT_LookupKey(athenaPIT, key, result);
     parcBuffer_Release(&key);
 
-
-    // Match based on Name & keyId Restriction
-    // A content object may or may not have a keyId
+    // Match with Name and KeyId
     PARCBuffer *keyId = ccnxContentObject_GetKeyId(ccnxContentMessage);
     if (keyId != NULL) {
         key = _athenaPIT_createCompoundKey(name, keyId);
-        entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
-        if (entry != NULL) {
-            uint64_t now = parcClock_GetTime(athenaPIT->clock);
-            _athenaPIT_AddLifetimeStat(athenaPIT, _athenaPITEntry_Age(entry, now));
-            parcBitVector_SetVector(result, entry->ingress);
-
-            // Remove Match
-            _athenaPIT_removeInterestFromCleanupList(athenaPIT, entry->ingress, key);
-            parcHashMap_Remove(athenaPIT->entryTable, key);
-            _athenaPIT_removeInterestFromTimeoutTable(athenaPIT, entry);
-            athenaPIT->interestCount -= parcBitVector_NumberOfBitsSet(result);
-        }
+        _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
 
-    // Match based on Name & Content Id Restriction
-    PARCCryptoHash *contentId = _createContentObjectHash(ccnxContentMessage);
     // M.S. Nominally, the contentId should not be null as any content message received
     // should be hashable. But because locally generated contentObjects are not currently
     // hashable, we need to support this case.
+    PARCCryptoHash *contentId = _createContentObjectHash(ccnxContentMessage);
     if (contentId != NULL) {
         key = _athenaPIT_createCompoundKey(name, parcCryptoHash_GetDigest(contentId));
         parcCryptoHash_Release(&contentId);
-        entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
-
-        // We have an entry, set the match vector and remove
-        if (entry != NULL) {
-            uint64_t now = parcClock_GetTime(athenaPIT->clock);
-            _athenaPIT_AddLifetimeStat(athenaPIT, _athenaPITEntry_Age(entry, now));
-            parcBitVector_SetVector(result, entry->ingress);
-
-            // Remove Match
-            _athenaPIT_removeInterestFromCleanupList(athenaPIT, entry->ingress, key);
-            parcHashMap_Remove(athenaPIT->entryTable, key);
-            _athenaPIT_removeInterestFromTimeoutTable(athenaPIT, entry);
-            athenaPIT->interestCount -= parcBitVector_NumberOfBitsSet(result);
-        }
+        _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
+
     return result;
 }
 
@@ -713,20 +693,8 @@ _athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
     PARCCryptoHash *contentId = _createContentObjectHash(ccnxContentMessage);
     if (contentId != NULL) {
         PARCBuffer *key = _athenaPIT_createCompoundKey(NULL, parcCryptoHash_GetDigest(contentId));
-        _AthenaPITEntry *entry = (_AthenaPITEntry *) parcHashMap_Get(athenaPIT->entryTable, key);
         parcCryptoHash_Release(&contentId);
-
-        if (entry != NULL) {
-            uint64_t now = parcClock_GetTime(athenaPIT->clock);
-            _athenaPIT_AddLifetimeStat(athenaPIT, _athenaPITEntry_Age(entry, now));
-            parcBitVector_SetVector(result, entry->ingress);
-
-            // Remove Match
-            _athenaPIT_removeInterestFromCleanupList(athenaPIT, entry->ingress, key);
-            parcHashMap_Remove(athenaPIT->entryTable, key);
-            _athenaPIT_removeInterestFromTimeoutTable(athenaPIT, entry);
-            athenaPIT->interestCount -= parcBitVector_NumberOfBitsSet(result);
-        }
+        _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
 
