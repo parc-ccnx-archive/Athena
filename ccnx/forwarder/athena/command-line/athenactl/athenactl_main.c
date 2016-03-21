@@ -35,10 +35,7 @@
 #include <config.h>
 
 #include <stdlib.h>
-#include <errno.h>
 #include <getopt.h>
-#include <netdb.h>
-#include <sys/param.h>
 #include <stdio.h>
 
 #include <LongBow/runtime.h>
@@ -46,10 +43,7 @@
 #include <ccnx/forwarder/athena/athenactl.h>
 #include <ccnx/forwarder/athena/athenactl_About.h>
 
-#include <parc/algol/parc_URIAuthority.h>
-
 #include <parc/security/parc_Security.h>
-#include <parc/security/parc_PublicKeySignerPkcs12Store.h>
 
 #include <ccnx/common/ccnx_KeystoreUtilities.h>
 
