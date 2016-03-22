@@ -186,10 +186,10 @@ typedef struct test_data {
     CCNxInterest *testNamelessInterest;
 
     CCNxContentObject *testContent1;
-    CCNxContentObject *testNamelessContent;
     CCNxContentObject *testContent1Prime;
     CCNxContentObject *testContent1WithSig;
     CCNxContentObject *testContent2;
+    CCNxContentObject *testNamelessContent;
 
     PARCBitVector *testVector1;
     PARCBitVector *testVector2;
@@ -274,7 +274,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     data->testPIT = athenaPIT_Create();
 
     // Content 1
-    CCNxName *name = ccnxName_CreateFromCString("ccnx:/test/content");
+    CCNxName *name = ccnxName_CreateFromCString("lci:/test/content");
     PARCBuffer *payload = parcBuffer_WrapCString("Some really hot payload 1");
 
     CCNxContentObject *preSendCO = ccnxContentObject_CreateWithNameAndPayload(name, payload);
@@ -331,7 +331,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     ccnxName_Release(&name);
 
     // Content 2
-    name = ccnxName_CreateFromCString("ccnx:/test/content2");
+    name = ccnxName_CreateFromCString("lci:/test/content2");
     payload = parcBuffer_WrapCString("Some really hot payload 2");
     preSendCO = ccnxContentObject_CreateWithNameAndPayload(name, payload);
     data->testContent2 = _createReceivedContent(preSendCO);
@@ -340,7 +340,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
     ccnxName_Release(&name);
 
     // Interest 2
-    name = ccnxName_CreateFromCString("ccnx:/test/content2");
+    name = ccnxName_CreateFromCString("lci:/test/content2");
     data->testInterest2 = _createTestInterest(name, NULL, NULL);
     ccnxName_Release(&name);
 
@@ -376,10 +376,10 @@ LONGBOW_TEST_FIXTURE_TEARDOWN(Global)
     ccnxInterest_Release((&data->testNamelessInterest));
 
     ccnxContentObject_Release(&data->testContent1);
-    ccnxContentObject_Release(&data->testNamelessContent);
     ccnxContentObject_Release(&data->testContent1Prime);
     ccnxContentObject_Release(&data->testContent1WithSig);
     ccnxContentObject_Release(&data->testContent2);
+    ccnxContentObject_Release(&data->testNamelessContent);
 
     parcBitVector_Release(&data->testVector1);
     parcBitVector_Release(&data->testVector2);
@@ -634,15 +634,24 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_Nameless)
 
     PARCBitVector *savedReturnVector = expectedReturnVector;
 
-    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, data->testContent1Prime, savedReturnVector);
+    CCNxName *namePrime = ccnxContentObject_GetName(data->testContent1Prime);
+    PARCBuffer *keyIdPrime = ccnxContentObject_GetKeyId(data->testContent1Prime);
+    PARCBuffer *contentIdPrime = _createMessageHash(data->testContent1Prime);
+
+    PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, namePrime, keyIdPrime, contentIdPrime, savedReturnVector);
     assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Expect to find no match in PIT");
     parcBitVector_Release(&backLinkVector);
+    parcBuffer_Release(&contentIdPrime);
 
-    backLinkVector = athenaPIT_Match(data->testPIT, data->testNamelessContent, savedReturnVector);
+    CCNxName *nameNameless = ccnxContentObject_GetName(data->testNamelessContent);
+    PARCBuffer *keyIdNameless = ccnxContentObject_GetKeyId(data->testNamelessContent);
+    PARCBuffer *contentIdNameless = _createMessageHash(data->testNamelessContent);
+
+    backLinkVector = athenaPIT_Match(data->testPIT, nameNameless, keyIdNameless, contentIdNameless, savedReturnVector);
     assertTrue(parcBitVector_Equals(backLinkVector, data->testVector1), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
+    parcBuffer_Release(&contentIdNameless);
 }
-
 
 LONGBOW_TEST_CASE(Global, athenaPIT_Match_MultipleRestrictions)
 {
@@ -857,7 +866,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfTableEntries)
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
     tableEntries = athenaPIT_GetNumberOfTableEntries(data->testPIT);
-    assertTrue(tableEntries == 4, "Expect 3 table entry at this point");
+    assertTrue(tableEntries == 4, "Expect 4 table entry at this point");
 
     // Aggregation of testInterest1
     parcBitVector_Set(expectedReturnVector, 5);
@@ -866,7 +875,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfTableEntries)
     assertTrue(addResult == AthenaPITResolution_Aggregated, "Expect AddInterest() result to be Aggregated");
 
     tableEntries = athenaPIT_GetNumberOfTableEntries(data->testPIT);
-    assertTrue(tableEntries == 4, "Expect 3 table entry at this point");
+    assertTrue(tableEntries == 4, "Expect 4 table entry at this point");
 
     // Duplicate of testInterest1
     addResult =
@@ -874,7 +883,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfTableEntries)
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
     tableEntries = athenaPIT_GetNumberOfTableEntries(data->testPIT);
-    assertTrue(tableEntries == 4, "Expect 1 table entry at this point");
+    assertTrue(tableEntries == 4, "Expect 4 table entry at this point");
 }
 
 LONGBOW_TEST_CASE(Global, athenaPIT_GetNumberOfPendingInterests)
@@ -1089,7 +1098,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Performance)
 
     CCNxName *name = NULL;
     PARCBuffer *payload = parcBuffer_WrapCString("Some Payload");
-    const char *lciPrefix = "ccnx:/";
+    const char *lciPrefix = "lci:/";
     char uri[30];
     srand((uint32_t) parcClock_GetTime(data->testPIT->clock));
     for (size_t i = 0; i < ITERATIONS; ++i) {

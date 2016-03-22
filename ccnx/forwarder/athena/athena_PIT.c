@@ -635,9 +635,9 @@ _athenaPIT_LookupKey(AthenaPIT *athenaPIT, PARCBuffer *key, PARCBitVector *egres
 
 static PARCBitVector *
 _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
-                        CCNxName *name,
-                        PARCBuffer *keyId,
-                        PARCBuffer *contentId,
+                        const CCNxName *name,
+                        const PARCBuffer *keyId,
+                        const PARCBuffer *contentId,
                         const PARCBitVector *ingressVector)
 {
     //TODO: Add egress check.
@@ -671,9 +671,9 @@ _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
 
 static PARCBitVector *
 _athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
-                        CCNxName *name,
-                        PARCBuffer *keyId,
-                        PARCBuffer *contentId,
+                        const CCNxName *name,
+                        const PARCBuffer *keyId,
+                        const PARCBuffer *contentId,
                         const PARCBitVector *ingressVector)
 {
     PARCBitVector *result = parcBitVector_Create();
@@ -689,9 +689,9 @@ _athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
 
 PARCBitVector *
 athenaPIT_Match(AthenaPIT *athenaPIT,
-                CCNxName *name,
-                PARCBuffer *keyId,
-                PARCBuffer *digest,
+                const CCNxName *name,
+                const PARCBuffer *keyId,
+                const PARCBuffer *digest,
                 const PARCBitVector *ingressVector)
 {
     if (name == NULL) {
