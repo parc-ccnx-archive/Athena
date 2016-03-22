@@ -573,18 +573,6 @@ athenaPIT_AddInterest(AthenaPIT *athenaPIT,
     return result;
 }
 
-
-static PARCCryptoHash*
-_createContentObjectHash(const CCNxContentObject *ccnxContentMessage)
-{
-    // We need to interact with the content message as a WireFormatMessage to get to
-    // the content hash API.
-    CCNxWireFormatMessage *wireFormatMessage = (CCNxWireFormatMessage *) ccnxContentMessage;
-
-    PARCCryptoHash *hash = ccnxWireFormatMessage_CreateContentObjectHash(wireFormatMessage);
-    return hash;
-}
-
 bool
 athenaPIT_RemoveInterest(AthenaPIT *athenaPIT,
                          const CCNxInterest *ccnxInterestMessage,
@@ -647,14 +635,14 @@ _athenaPIT_LookupKey(AthenaPIT *athenaPIT, PARCBuffer *key, PARCBitVector *egres
 
 static PARCBitVector *
 _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
-                        const CCNxContentObject *ccnxContentMessage,
+                        CCNxName *name,
+                        PARCBuffer *keyId,
+                        PARCBuffer *contentId,
                         const PARCBitVector *ingressVector)
 {
     //TODO: Add egress check.
 
     PARCBitVector *result = parcBitVector_Create();
-
-    CCNxName *name = ccnxContentObject_GetName(ccnxContentMessage);
 
     // Match based on Name alone
     PARCBuffer *key = _athenaPIT_createCompoundKey(name, NULL);
@@ -662,20 +650,18 @@ _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
     parcBuffer_Release(&key);
 
     // Match with Name and KeyId
-    PARCBuffer *keyId = ccnxContentObject_GetKeyId(ccnxContentMessage);
     if (keyId != NULL) {
         key = _athenaPIT_createCompoundKey(name, keyId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
 
+    // Match based on Name & Content Id Restriction
     // M.S. Nominally, the contentId should not be null as any content message received
     // should be hashable. But because locally generated contentObjects are not currently
     // hashable, we need to support this case.
-    PARCCryptoHash *contentId = _createContentObjectHash(ccnxContentMessage);
     if (contentId != NULL) {
-        key = _athenaPIT_createCompoundKey(name, parcCryptoHash_GetDigest(contentId));
-        parcCryptoHash_Release(&contentId);
+        key = _athenaPIT_createCompoundKey(name, contentId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
@@ -685,15 +671,15 @@ _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
 
 static PARCBitVector *
 _athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
-                         const CCNxContentObject *ccnxContentMessage,
-                         const PARCBitVector *ingressVector)
+                        CCNxName *name,
+                        PARCBuffer *keyId,
+                        PARCBuffer *contentId,
+                        const PARCBitVector *ingressVector)
 {
     PARCBitVector *result = parcBitVector_Create();
 
-    PARCCryptoHash *contentId = _createContentObjectHash(ccnxContentMessage);
     if (contentId != NULL) {
-        PARCBuffer *key = _athenaPIT_createCompoundKey(NULL, parcCryptoHash_GetDigest(contentId));
-        parcCryptoHash_Release(&contentId);
+        PARCBuffer *key = _athenaPIT_createCompoundKey(NULL, contentId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
@@ -703,14 +689,15 @@ _athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
 
 PARCBitVector *
 athenaPIT_Match(AthenaPIT *athenaPIT,
-                const CCNxContentObject *ccnxContentMessage,
+                CCNxName *name,
+                PARCBuffer *keyId,
+                PARCBuffer *digest,
                 const PARCBitVector *ingressVector)
 {
-    CCNxName *name = ccnxContentObject_GetName(ccnxContentMessage);
     if (name == NULL) {
-        return _athenaPIT_MatchNameless(athenaPIT, ccnxContentMessage, ingressVector);
+        return _athenaPIT_MatchNameless(athenaPIT, name, keyId, digest, ingressVector);
     } else {
-        return _athenaPIT_MatchWithName(athenaPIT, ccnxContentMessage, ingressVector);
+        return _athenaPIT_MatchWithName(athenaPIT, name, keyId, digest, ingressVector);
     }
 }
 
