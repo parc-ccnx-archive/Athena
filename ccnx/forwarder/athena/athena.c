@@ -278,7 +278,7 @@ _processContentObject(Athena *athena, CCNxContentObject *contentObject, PARCBitV
     //
     // *   (1) If it does not match anything in the PIT, drop it
     //
-    CCNxName *name = ccnxContentObject_GetName(contentObject);
+    const CCNxName *name = ccnxContentObject_GetName(contentObject);
     PARCBuffer *keyId = ccnxContentObject_GetKeyId(contentObject);
     PARCBuffer *digest = _createMessageHash(contentObject);
 
@@ -312,7 +312,7 @@ _processManifest(Athena *athena, CCNxManifest *manifest, PARCBitVector *ingressV
     //
     // *   (1) If it does not match anything in the PIT, drop it
     //
-    CCNxName *name = ccnxManifest_GetName(manifest);
+    const CCNxName *name = ccnxManifest_GetName(manifest);
     PARCBuffer *digest = _createMessageHash(manifest);
 
     PARCBitVector *egressVector = athenaPIT_Match(athena->athenaPIT, name, NULL, digest, ingressVector);

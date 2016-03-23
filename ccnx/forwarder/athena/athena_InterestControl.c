@@ -83,7 +83,7 @@ _create_response(Athena *athena, CCNxName *ccnxName, const char *format, ...)
     PARCBuffer *responsePayload = parcBuffer_AllocateCString(responseBuffer);
 
     parcLog_Debug(athena->log, responseBuffer);
-    CCNxContentObject *responseContent = ccnxContentObject_CreateWithDataPayload(ccnxName, responsePayload);
+    CCNxContentObject *responseContent = ccnxContentObject_CreateWithNameAndPayload(ccnxName, responsePayload);
     CCNxMetaMessage *responseMessage = ccnxMetaMessage_CreateFromContentObject(responseContent);
 
     ccnxContentObject_Release(&responseContent);
@@ -123,7 +123,7 @@ _create_stats_response(Athena *athena, CCNxName *ccnxName)
     parcMemory_Deallocate(&jsonString);
 
     CCNxContentObject *contentObject =
-        ccnxContentObject_CreateWithDataPayload(ccnxName, parcBuffer_Flip(payload));
+        ccnxContentObject_CreateWithNameAndPayload(ccnxName, parcBuffer_Flip(payload));
     ccnxContentObject_SetExpiryTime(contentObject, nowInMillis + 100); // this response is good for 100 millis
 
     CCNxMetaMessage *result = ccnxMetaMessage_CreateFromContentObject(contentObject);
@@ -390,7 +390,7 @@ _create_FIBList_response(Athena *athena, CCNxName *ccnxName, PARCList *fibEntryL
     PARCBuffer *payload = parcBuffer_CreateFromArray(jsonString, strlen(jsonString));
 
     CCNxContentObject *contentObject =
-        ccnxContentObject_CreateWithDataPayload(ccnxName, parcBuffer_Flip(payload));
+        ccnxContentObject_CreateWithNameAndPayload(ccnxName, parcBuffer_Flip(payload));
 
     struct timeval tv;
     gettimeofday(&tv, NULL);
