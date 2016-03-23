@@ -14,6 +14,8 @@ include( detectCacheSize )
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_C_FLAGS_NOPANTS "${CMAKE_C_FLAGS_NOPANTS} -O3 -DNDEBUG -DAthena_DISABLE_VALIDATION")
 
+include_directories(${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/ccnx/forwarder/athena)
+
 include_directories($ENV{CCNX_DEPENDENCIES}/include)
 set(OPENSSL_ROOT_DIR $ENV{CCNX_DEPENDENCIES})
 
@@ -38,10 +40,6 @@ include_directories(${CCNX_PORTAL_INCLUDE_DIRS})
 find_package ( Threads REQUIRED )
 
 find_package ( OpenSSL REQUIRED )
-
-include_directories(${PROJECT_BINARY_DIR}/ccnx/forwarder/athena
-                    ${PROJECT_SOURCE_DIR}
-					)
 
 find_package( Doxygen )
 
