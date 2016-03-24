@@ -175,6 +175,7 @@ LONGBOW_TEST_FIXTURE(Global)
 
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_ProcessMessage_Size);
     LONGBOW_RUN_TEST_CASE(Global, athenaPIT_ProcessMessage_AvgEntryLifetime);
+    LONGBOW_RUN_TEST_CASE(Global, athenaPIT_CreateEntryList);
 }
 
 typedef struct test_data {
@@ -1067,6 +1068,49 @@ LONGBOW_TEST_CASE(Global, athenaPIT_ProcessMessage_AvgEntryLifetime)
 
     ccnxMetaMessage_Release(&message);
     ccnxMetaMessage_Release(&response);
+}
+
+LONGBOW_TEST_CASE(Global, athenaPIT_CreateEntryList)
+{
+    TestData *data = longBowTestCase_GetClipBoardData(testCase);
+
+    PARCBitVector *expectedReturnVector;
+
+    AthenaPITResolution addResult =
+            athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
+
+    parcBitVector_Set(expectedReturnVector, 1);
+    addResult =
+            athenaPIT_AddInterest(data->testPIT, data->testInterest1WithKeyId, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
+
+    parcBitVector_Set(expectedReturnVector, 3);
+    addResult =
+            athenaPIT_AddInterest(data->testPIT, data->testInterest1WithContentId, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
+
+    // Aggregation of testInterest1
+    parcBitVector_Set(expectedReturnVector, 5);
+    addResult =
+            athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector2, &expectedReturnVector);
+    assertTrue(addResult == AthenaPITResolution_Aggregated, "Expect AddInterest() result to be Aggregated");
+
+    // Duplicate of testInterest1
+    addResult =
+            athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
+
+    PARCList *entryList = athenaPIT_CreateEntryList(data->testPIT);
+    printf("\n");
+    for (size_t i=0; i<parcList_Size(entryList); ++i) {
+        PARCBuffer *strbuf = parcList_GetAtIndex(entryList, i);
+        char *toprint = parcBuffer_ToString(strbuf);
+        printf("%s\n", toprint);
+        parcMemory_Deallocate(&toprint);
+    }
+
+    parcList_Release(&entryList);
 }
 
 LONGBOW_TEST_FIXTURE(Performance)

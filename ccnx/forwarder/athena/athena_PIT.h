@@ -106,7 +106,6 @@ AthenaPIT *athenaPIT_Create();
  */
 AthenaPIT *athenaPIT_CreateCapacity(size_t capacity);
 
-
 /**
  * @abstract Release a PIT
  * @discussion
@@ -304,4 +303,7 @@ time_t athenaPIT_GetMeanEntryLifetime(const AthenaPIT *athenaPIT);
  * @endcode
  */
 CCNxMetaMessage *athenaPIT_ProcessMessage(const AthenaPIT *athenaPIT, const CCNxMetaMessage *message);
+
+PARCList *athenaPIT_CreateEntryList(const AthenaPIT *athenaPIT);
+
 #endif // libathena_pit_h
