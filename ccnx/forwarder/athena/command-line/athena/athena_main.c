@@ -63,7 +63,11 @@ _athenaLogo()
 static void
 _usage()
 {
-    printf("usage: athena [-c <protocol>://<address>:<port>[/listener][/name=<name>][/local=<bool>]] [-s contentStoreSize(MBs)] [--statefile=athenastate] [--debug]\n");
+    printf("usage: athena [-c <protocol>://<address>:<port>[/listener][/name=<name>][/local=<bool>]] [-s storeSize] [-o stateFile] [-d]\n");
+    printf("    -c | --connect    Transport link specification to create\n");
+    printf("    -s | --store      Size of the content store in mega bytes\n");
+    printf("    -o | --statefile  File to contain configuration state changes\n");
+    printf("    -d | --debug      Turn on debug logging\n");
 }
 
 static struct option options[] = {
