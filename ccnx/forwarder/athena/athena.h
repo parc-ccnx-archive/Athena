@@ -67,6 +67,7 @@ typedef struct Athena {
     AthenaFIB *athenaFIB;
     AthenaContentStore *athenaContentStore;
     PARCLog *log;
+    PARCOutputStream *configLog;
 
     struct {
         uint64_t numProcessedInterests;

@@ -136,19 +136,19 @@ athenaFIB_Lookup(AthenaFIB *athenaFIB, const CCNxName *ccnxName, PARCBitVector *
     // and remove the ingress link if it's in the entry.
     if ((result == NULL) && (athenaFIB->defaultRoute != NULL)) {
         if (ingressVector != NULL) {
-	    if (parcBitVector_Contains(athenaFIB->defaultRoute, ingressVector)) {
+            if (parcBitVector_Contains(athenaFIB->defaultRoute, ingressVector)) {
                 // The ingress link is in the link vector list
                 // either make a copy and remove it, or return an empty egress
-	        if (parcBitVector_NumberOfBitsSet(athenaFIB->defaultRoute) > 1) {
-		    result = parcBitVector_Copy(athenaFIB->defaultRoute);
-		    parcBitVector_ClearVector(result, ingressVector);
-	        } else { // ingress was the only link
+                if (parcBitVector_NumberOfBitsSet(athenaFIB->defaultRoute) > 1) {
+                    result = parcBitVector_Copy(athenaFIB->defaultRoute);
+                    parcBitVector_ClearVector(result, ingressVector);
+                } else { // ingress was the only link
                     result = NULL;
-	        }
-	    } else { // ingress was not in the default route
+                }
+            } else { // ingress was not in the default route
                 result = parcBitVector_Acquire(athenaFIB->defaultRoute);
             }
-	} else { // no ingress vector was provided
+        } else { // no ingress vector was provided
             result = parcBitVector_Acquire(athenaFIB->defaultRoute);
         }
     }

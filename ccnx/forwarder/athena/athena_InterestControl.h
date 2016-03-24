@@ -65,4 +65,21 @@
  */
 int athenaInterestControl(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressVector);
 
+/**
+ * @abstract log a change in the forwarder configuration
+ * @discussion
+ *
+ * @param [in] athena forwarder context
+ * @param [in] control message to log, needs to match athenactl syntax
+ *
+ * Example:
+ * @code
+ * {
+ *     Athena *athena = athena_Create();
+ *     athenaInterestControl_LogConfigurationChange(athena, "set level debug");
+ *     athena_Release(&athena);
+ * }
+ * @endcode
+ */
+void athenaInterestControl_LogConfigurationChange(Athena *athena, const char *format, ...);
 #endif // libathena_InterestControl_h

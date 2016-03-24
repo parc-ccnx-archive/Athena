@@ -134,6 +134,20 @@ _create_stats_response(Athena *athena, CCNxName *ccnxName)
     return result;
 }
 
+void
+athenaInterestControl_LogConfigurationChange(Athena *athena, const char *format, ...)
+{
+    if (athena->configLog) {
+        va_list ap;
+        va_start(ap, format);
+
+        char configLogBuffer[MAXPATHLEN];
+        vsprintf(configLogBuffer, format, ap);
+        parcOutputStream_WriteCString(athena->configLog, configLogBuffer);
+        parcOutputStream_WriteCString(athena->configLog, "\n");
+    }
+}
+
 static CCNxMetaMessage *
 _Control_Command_Set(Athena *athena, CCNxName *ccnxName, const char *command)
 {
@@ -153,26 +167,32 @@ _Control_Command_Set(Athena *athena, CCNxName *ccnxName, const char *command)
         if (strcasecmp(level, AthenaCommand_LogDebug) == 0) {
             athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_Debug);
             parcLog_SetLevel(athena->log, PARCLogLevel_Debug);
+            athenaInterestControl_LogConfigurationChange(athena, "set level debug");
             responseMessage = _create_response(athena, ccnxName, "set athena logging level to %s", AthenaCommand_LogDebug);
         } else if (strcasecmp(level, AthenaCommand_LogInfo) == 0) {
             athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_Info);
             parcLog_SetLevel(athena->log, PARCLogLevel_Info);
+            athenaInterestControl_LogConfigurationChange(athena, "set level info");
             responseMessage = _create_response(athena, ccnxName, "set athena logging level to %s", AthenaCommand_LogInfo);
         } else if (strcasecmp(level, AthenaCommand_LogOff) == 0) {
             athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_Off);
             parcLog_SetLevel(athena->log, PARCLogLevel_Off);
+            athenaInterestControl_LogConfigurationChange(athena, "set level off");
             responseMessage = _create_response(athena, ccnxName, "set athena logging level to %s", AthenaCommand_LogOff);
         } else if (strcasecmp(level, AthenaCommand_LogAll) == 0) {
             athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_All);
             parcLog_SetLevel(athena->log, PARCLogLevel_All);
+            athenaInterestControl_LogConfigurationChange(athena, "set level all");
             responseMessage = _create_response(athena, ccnxName, "set athena logging level to %s", AthenaCommand_LogAll);
         } else if (strcasecmp(level, AthenaCommand_LogError) == 0) {
             athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_Error);
             parcLog_SetLevel(athena->log, PARCLogLevel_Error);
+            athenaInterestControl_LogConfigurationChange(athena, "set level error");
             responseMessage = _create_response(athena, ccnxName, "set athena logging level to %s", AthenaCommand_LogError);
         } else if (strcasecmp(level, AthenaCommand_LogNotice) == 0) {
             athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_Notice);
             parcLog_SetLevel(athena->log, PARCLogLevel_Notice);
+            athenaInterestControl_LogConfigurationChange(athena, "set level notice");
             responseMessage = _create_response(athena, ccnxName, "set athena logging level to %s", AthenaCommand_LogNotice);
         } else {
             responseMessage = _create_response(athena, ccnxName, "unknown logging level (%s)", level);
@@ -190,6 +210,7 @@ static CCNxMetaMessage *
 _Control_Command_Quit(Athena *athena, CCNxName *ccnxName, const char *command)
 {
     athena->athenaState = Athena_Exit;
+    athenaInterestControl_LogConfigurationChange(athena, "quit");
     return _create_response(athena, ccnxName, "Athena exiting ...");
 }
 
@@ -229,6 +250,8 @@ _Control_Command_Spawn(Athena *athena, CCNxName *ccnxName, const char *command, 
         return responseMessage;
     }
     parcURI_Release(&connectionURI);
+
+    athenaInterestControl_LogConfigurationChange(athena, "spawn %s", connectionSpecification);
 
     pthread_t thread;
     // Passing in a reference that will be released by the new thread as the thread may not
@@ -463,6 +486,7 @@ _FIB_Command(Athena *athena, CCNxInterest *interest)
                 char *routePrefix = ccnxName_ToString(prefixName);
                 const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
                 responseMessage = _create_response(athena, ccnxName, "%s route %s -> %s", command, routePrefix, linkIdName);
+                athenaInterestControl_LogConfigurationChange(athena, "%s route %s %s", command, linkIdName, routePrefix);
                 parcMemory_Deallocate(&routePrefix);
             } else {
                 responseMessage = _create_response(athena, ccnxName, "%s failed", command);
@@ -518,6 +542,7 @@ _TransportLinkAdapter_Command(Athena *athena, CCNxInterest *interest)
                 parcURI_Release(&connectionURI);
                 if (linkName) {
                     responseMessage = _create_response(athena, ccnxName, "%s", linkName);
+                    athenaInterestControl_LogConfigurationChange(athena, "add link %s", arguments);
                 } else {
                     responseMessage = _create_response(athena, ccnxName, "New %s link failed: %s", arguments, strerror(errno));
                 }
@@ -529,6 +554,7 @@ _TransportLinkAdapter_Command(Athena *athena, CCNxInterest *interest)
                     responseMessage = _create_response(athena, ccnxName, "removal of %s failed", arguments);
                 } else {
                     responseMessage = _create_response(athena, ccnxName, "%s removed", arguments);
+                    athenaInterestControl_LogConfigurationChange(athena, "remove link %s", arguments);
                 }
             }
         } else {
