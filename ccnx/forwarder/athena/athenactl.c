@@ -715,6 +715,7 @@ athenactl_Command(PARCIdentity *identity, int argc, char **argv)
     }
     printf("athenactl: unknown command\n");
     printf("commands: add/list/remove/set/unset/spawn/quit\n");
+    printf("      or: <ccnx URI> <payload>\n");
     return 1;
 }
 
@@ -732,4 +733,5 @@ athenactl_Usage(void)
     printf("        set level <off/notice/info/debug/error/all>\n");
     printf("        spawn <port>\n");
     printf("        quit\n");
+    printf("        <ccnx URI> <payload>\n");
 }
