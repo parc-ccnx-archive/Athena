@@ -140,7 +140,6 @@ _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
             ccnxInterest_SetPayload(interest, payload);
             parcBuffer_Release(&payload);
         }
-        printf("%s %s\n", interestName, interestPayload);
         result = athenactl_SendInterestControl(identity, interest);
         if (result) {
             printf("%s\n", result);
