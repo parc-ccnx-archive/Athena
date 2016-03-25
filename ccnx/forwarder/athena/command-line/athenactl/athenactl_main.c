@@ -92,7 +92,7 @@ static struct option longopts[] = {
     { NULL,       0,                 NULL, 0   }
 };
 
-int
+static int
 _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
 {
     char configLine[MAXPATHLEN];

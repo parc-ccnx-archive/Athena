@@ -77,7 +77,7 @@ int athenaInterestControl(Athena *athena, CCNxInterest *interest, PARCBitVector 
  * @code
  * {
  *     Athena *athena = athena_Create();
- *     athenaInterestControl_LogConfigurationChange(athena, ccnxName, "set level debug");
+ *     athenaInterestControl_LogConfigurationChange(athena, ccnxName, "payload");
  *     athena_Release(&athena);
  * }
  * @endcode
