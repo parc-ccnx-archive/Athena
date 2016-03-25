@@ -98,6 +98,7 @@ _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
     char configLine[MAXPATHLEN];
     char *interestName = NULL;
     char *interestPayload = NULL;
+    int lineNumber = 0;
     const char *result = 0;
 
     FILE *input = fopen(configurationFile, "r");
@@ -140,6 +141,7 @@ _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
             ccnxInterest_SetPayload(interest, payload);
             parcBuffer_Release(&payload);
         }
+        printf("[%d] %s %s\n", lineNumber++, interestName, interestPayload);
         result = athenactl_SendInterestControl(identity, interest);
         if (result) {
             printf("%s\n", result);

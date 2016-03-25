@@ -648,6 +648,37 @@ _athenactl_Run(PARCIdentity *identity, int argc, char **argv)
     return 0;
 }
 
+static int
+_athenactl_InputCommand(PARCIdentity *identity, int argc, char **argv)
+{
+    CCNxName *name = ccnxName_CreateFromCString(argv[0]);
+    CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+    if (argc > 1) {
+        PARCBufferComposer *payloadComposer = parcBufferComposer_Create();
+        parcBufferComposer_Format(payloadComposer, "%s", argv[1]);
+        argc--; argv++;
+        while (argc > 1) {
+            parcBufferComposer_Format(payloadComposer, " %s", argv[1]);
+            argc--; argv++;
+        }
+        PARCBuffer *payload = parcBufferComposer_GetBuffer(payloadComposer);
+        parcBuffer_Flip(payload);
+        ccnxInterest_SetPayload(interest, payload);
+        parcBufferComposer_Release(&payloadComposer);
+    }
+
+    const char *result = athenactl_SendInterestControl(identity, interest);
+    if (result) {
+        printf("%s\n", result);
+        parcMemory_Deallocate(&result);
+    }
+
+    ccnxMetaMessage_Release(&interest);
+
+    return 0;
+}
+
 int
 athenactl_Command(PARCIdentity *identity, int argc, char **argv)
 {
@@ -678,6 +709,9 @@ athenactl_Command(PARCIdentity *identity, int argc, char **argv)
     }
     if (strcasecmp(command, COMMAND_QUIT) == 0) {
         return _athenactl_Quit(identity, --argc, &argv[1]);
+    }
+    if (strncasecmp(command, CCNxNameAthena_Forwarder, strlen(CCNxNameAthena_Forwarder)) == 0) {
+        return _athenactl_InputCommand(identity, argc, &argv[0]);
     }
     printf("athenactl: unknown command\n");
     printf("commands: add/list/remove/set/unset/spawn/quit\n");
