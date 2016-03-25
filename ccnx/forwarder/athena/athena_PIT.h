@@ -304,6 +304,18 @@ time_t athenaPIT_GetMeanEntryLifetime(const AthenaPIT *athenaPIT);
  */
 CCNxMetaMessage *athenaPIT_ProcessMessage(const AthenaPIT *athenaPIT, const CCNxMetaMessage *message);
 
+/**
+ * @abstract Return a list of PIT entry information
+ * @discussion
+ *
+ * The function creates a PARCList of PARCBuffers containing PIT entry information in csv format.
+ * The first element of the list is column header information. The information currently returned
+ * for each entry is:
+ *    Name, ingress vector, egress vector, KeyId Restricted, Content Hash Restricted, Nameless
+ *
+ * @param [in] athenaPIT PIT instance
+ * @return PARCList List of PIT entry information
+ */
 PARCList *athenaPIT_CreateEntryList(const AthenaPIT *athenaPIT);
 
 #endif // libathena_pit_h
