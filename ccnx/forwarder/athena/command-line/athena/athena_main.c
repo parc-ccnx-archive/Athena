@@ -104,7 +104,9 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
                     parcURI_Release(&connectionURI);
                     exit(EXIT_FAILURE);
                 }
-                athenaInterestControl_LogConfigurationChange(athena, "add link %s", optarg);
+                CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+                athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", optarg);
+                ccnxName_Release(&addLink);
                 parcURI_Release(&connectionURI);
                 interfaceConfigured = true;
                 break;
@@ -150,7 +152,9 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
             parcURI_Release(&connectionURI);
             exit(EXIT_FAILURE);
         }
-        athenaInterestControl_LogConfigurationChange(athena, "add link %s", _athenaDefaultConnectionURI);
+        CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+        athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", _athenaDefaultConnectionURI);
+        ccnxName_Release(&addLink);
         parcURI_Release(&connectionURI);
         struct utsname name;
         if (uname(&name) == 0) {
@@ -161,7 +165,9 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
             if (athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, nodeURI) == NULL) {
                 parcURI_Release(&nodeURI);
             } else {
-                athenaInterestControl_LogConfigurationChange(athena, "add link %s", nodeURIspecification);
+                CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+                athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", nodeURIspecification);
+                ccnxName_Release(&addLink);
             }
         }
     }

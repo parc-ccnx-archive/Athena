@@ -80,8 +80,8 @@ athenactl_EncodeMessage(CCNxMetaMessage *message)
     parcSigner_Release(&signer);
 }
 
-static const char *
-_athenactl_SendInterestControl(PARCIdentity *identity, CCNxMetaMessage *message)
+const char *
+athenactl_SendInterestControl(PARCIdentity *identity, CCNxMetaMessage *message)
 {
     const char *result = NULL;
     CCNxPortalFactory *factory = ccnxPortalFactory_Create(identity);
@@ -143,7 +143,7 @@ _athenactl_AddListener(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("Link: %s\n", result);
         parcMemory_Deallocate(&result);
@@ -180,7 +180,7 @@ _athenactl_AddConnection(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("Link: %s\n", result);
         parcMemory_Deallocate(&result);
@@ -209,7 +209,7 @@ _athenactl_AddLink(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("Link: %s\n", result);
         parcMemory_Deallocate(&result);
@@ -242,7 +242,7 @@ _athenactl_AddRoute(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("FIB: %s\n", result);
         parcMemory_Deallocate(&result);
@@ -275,7 +275,7 @@ _athenactl_RemoveRoute(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("FIB: %s\n", result);
         parcMemory_Deallocate(&result);
@@ -319,7 +319,7 @@ _athenactl_ListLinks(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     printf("Link: Interface list");
     if (result) {
         PARCBuffer *buffer = parcBuffer_WrapCString((char *) result);
@@ -385,7 +385,7 @@ _athenactl_ListFIB(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         PARCJSON *jsonContent = parcJSON_ParseString(result);
         if (jsonContent != NULL) {
@@ -461,7 +461,7 @@ _athenactl_RemoveLink(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("Link: %s\n", result);
         parcMemory_Deallocate(&result);
@@ -499,7 +499,7 @@ _athenactl_SetDebug(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("%s\n", result);
         parcMemory_Deallocate(&result);
@@ -524,7 +524,7 @@ _athenactl_SetLogLevel(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("%s\n", result);
         parcMemory_Deallocate(&result);
@@ -542,7 +542,7 @@ _athenactl_UnSetDebug(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("%s\n", result);
         parcMemory_Deallocate(&result);
@@ -601,7 +601,7 @@ _athenactl_Quit(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("%s\n", result);
         parcMemory_Deallocate(&result);
@@ -637,7 +637,7 @@ _athenactl_Run(PARCIdentity *identity, int argc, char **argv)
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("%s\n", result);
         parcMemory_Deallocate(&result);

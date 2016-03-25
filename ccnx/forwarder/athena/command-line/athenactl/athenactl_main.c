@@ -96,9 +96,9 @@ int
 _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
 {
     char configLine[MAXPATHLEN];
-    char *configArgv[64];
-    int configArgc;
-    int result = 0;
+    char *interestName = NULL;
+    char *interestPayload = NULL;
+    const char *result = 0;
 
     FILE *input = fopen(configurationFile, "r");
     if (input == NULL) {
@@ -108,33 +108,46 @@ _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
 
     while (fgets(configLine, MAXPATHLEN, input)) {
         char *commandPtr = configLine;
-        configArgc = 0;
 
-        // Skip initial white space
+        // Skip initial white space, if any
         while (isspace(*commandPtr)) {
             commandPtr++;
         }
-        configArgv[configArgc] = commandPtr;
+        interestName = commandPtr;
 
-        // Scan and terminate arguments
-        while (*commandPtr) {
-            while (*commandPtr && (!isspace(*commandPtr))) {
-                commandPtr++;
-            }
-            if (*commandPtr) {
-                *commandPtr++ = '\0';
-                configArgv[++configArgc] = commandPtr;
-            }
+        // Scan and terminate the interest url
+        while (*commandPtr && (!isspace(*commandPtr))) {
+            commandPtr++;
         }
 
+        // Scan and terminate the payload, if any
+        if (*commandPtr) {
+            *commandPtr++ = '\0';
+            interestPayload = commandPtr;
+        }
+        while (*commandPtr && (*commandPtr != '\n')) {
+            commandPtr++;
+        }
+        *commandPtr = '\0';
+
         // Run the command
-        result = athenactl_Command(identity, configArgc + 1, configArgv);
+        CCNxName *name = ccnxName_CreateFromCString(interestName);
+        CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+        ccnxName_Release(&name);
+
+        if (interestPayload) {
+            PARCBuffer *payload = parcBuffer_AllocateCString(interestPayload);
+            ccnxInterest_SetPayload(interest, payload);
+            parcBuffer_Release(&payload);
+        }
+        printf("%s %s\n", interestName, interestPayload);
+        result = athenactl_SendInterestControl(identity, interest);
         if (result) {
-            break;
+            printf("%s\n", result);
         }
     }
     fclose(input);
-    return result;
+    return 0;
 }
 
 int

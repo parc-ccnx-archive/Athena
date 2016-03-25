@@ -108,4 +108,5 @@ void athenactl_Usage(void);
  * @endcode
  */
 void athenactl_EncodeMessage(CCNxMetaMessage *message);
+const char *athenactl_SendInterestControl(PARCIdentity *identity, CCNxMetaMessage *message);
 #endif // libathenactl_h
