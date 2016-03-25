@@ -919,7 +919,7 @@ athenaPIT_CreateEntryList(const AthenaPIT *athenaPIT)
 
     char lineStr[512];
     PARCIterator *it = parcHashMap_CreateValueIterator(athenaPIT->entryTable);
-    snprintf (lineStr, 512, "Name,ingress,egress,KeyIdRestricted,HashRestricted");
+    snprintf (lineStr, 512, "Name,ingress,egress,KeyIdRestricted,HashRestricted,Nameless");
     PARCBuffer *line = parcBuffer_AllocateCString(lineStr);
     parcList_Add(result, (PARCObject *)line);
     while(parcIterator_HasNext(it)) {
@@ -938,16 +938,24 @@ athenaPIT_CreateEntryList(const AthenaPIT *athenaPIT)
         }
         char *ingressStr = parcBitVector_ToString(entry->ingress);
         char *egressStr = parcBitVector_ToString(entry->egress);
-        bool hashRestricted =
-            (ccnxInterest_GetContentObjectHashRestriction(entry->ccnxMessage) != NULL);
+        PARCBuffer *contentId =
+            ccnxInterest_GetContentObjectHashRestriction(entry->ccnxMessage);
+        bool hashRestricted = (contentId != NULL);
         bool keyIdRestricted =
             (ccnxInterest_GetKeyIdRestriction(entry->ccnxMessage) != NULL);
-        snprintf (lineStr, 512, "%s,%s,%s,%s,%s",
+        bool nameless = false;
+        if (hashRestricted) {
+            PARCBuffer *testKey = _athenaPIT_createCompoundKey(NULL, contentId);
+            nameless = parcBuffer_Equals(testKey, entry->key);
+            parcBuffer_Release(&testKey);
+        }
+        snprintf (lineStr, 512, "%s,%s,%s,%s,%s,%s",
                   nameStr,
                   ingressStr,
                   egressStr,
                   (keyIdRestricted ? "true" : "false"),
-                  (hashRestricted ? "true": "false")
+                  (hashRestricted ? "true" : "false"),
+                  (nameless ? "true" : "false")
         );
         parcMemory_Deallocate(&ingressStr);
         parcMemory_Deallocate(&egressStr);

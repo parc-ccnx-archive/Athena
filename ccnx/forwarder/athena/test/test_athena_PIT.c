@@ -1078,20 +1078,20 @@ LONGBOW_TEST_CASE(Global, athenaPIT_CreateEntryList)
 
     AthenaPITResolution addResult =
             athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
+    parcBitVector_Set(expectedReturnVector, 1);
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
-    parcBitVector_Set(expectedReturnVector, 1);
     addResult =
             athenaPIT_AddInterest(data->testPIT, data->testInterest1WithKeyId, data->testVector1, &expectedReturnVector);
+    parcBitVector_Set(expectedReturnVector, 3);
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
-    parcBitVector_Set(expectedReturnVector, 3);
     addResult =
             athenaPIT_AddInterest(data->testPIT, data->testInterest1WithContentId, data->testVector1, &expectedReturnVector);
+    parcBitVector_Set(expectedReturnVector, 5);
     assertTrue(addResult == AthenaPITResolution_Forward, "Expect AddInterest() result to be Forward");
 
     // Aggregation of testInterest1
-    parcBitVector_Set(expectedReturnVector, 5);
     addResult =
             athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector2, &expectedReturnVector);
     assertTrue(addResult == AthenaPITResolution_Aggregated, "Expect AddInterest() result to be Aggregated");
