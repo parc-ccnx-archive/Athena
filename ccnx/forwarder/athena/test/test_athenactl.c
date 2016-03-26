@@ -121,6 +121,8 @@ static struct {
     {{COMMAND_ADD,    SUBCOMMAND_ADD_ROUTE,        "TCP_0", "lci:/foo/bar", NULL},              2, 1 },
     {{COMMAND_LIST,   SUBCOMMAND_LIST_FIB,         NULL},                                       2, 0 },
     {{COMMAND_LIST,   SUBCOMMAND_LIST_FIB,         NULL},                                       1, 1 },
+    {{COMMAND_LIST,   SUBCOMMAND_LIST_PIT,         NULL},                                       2, 0 },
+    {{COMMAND_LIST,   SUBCOMMAND_LIST_PIT,         NULL},                                       1, 1 },
     {{COMMAND_REMOVE, SUBCOMMAND_REMOVE_ROUTE,     "TCP_0", "lci:/foo/bar", NULL},              4, 0 },
     {{COMMAND_REMOVE, SUBCOMMAND_REMOVE_ROUTE,     "TCP_0", "lci:/foo/bar", NULL},              3, 1 },
     {{COMMAND_REMOVE, SUBCOMMAND_REMOVE_ROUTE,     "TCP_0", "lci:/foo/bar", NULL},              2, 1 },

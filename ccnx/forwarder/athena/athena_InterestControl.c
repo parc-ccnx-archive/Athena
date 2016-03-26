@@ -310,14 +310,21 @@ _PIT_Command(Athena *athena, CCNxInterest *interest)
         CCNxNameSegment *nameSegment = ccnxName_GetSegment(ccnxName, AthenaCommandSegment);
         char *command = ccnxNameSegment_ToString(nameSegment);
 
-        //char *arguments = _get_arguments(interest);
-
-        //responseMessage = _create_response(athena, ccnxName, ...
-
-        //parcMemory_Deallocate(&command);
-        //if (arguments) {
-        //    parcMemory_Deallocate(&arguments);
-        //}
+        if (strcasecmp(command, AthenaCommand_List) == 0) {
+            parcLog_Debug(athena->log, "PIT List command invoked");
+            PARCList *pitEntries = athenaPIT_CreateEntryList(athena->athenaPIT);
+            printf("\n");
+            for (size_t i = 0; i < parcList_Size(pitEntries); ++i) {
+                PARCBuffer *strbuf = parcList_GetAtIndex(pitEntries, i);
+                char *toprint = parcBuffer_ToString(strbuf);
+                parcLog_Info(athena->log, "%s\n", toprint);
+                parcMemory_Deallocate(&toprint);
+            }
+            parcList_Release(&pitEntries);
+            responseMessage = _create_response(athena, ccnxName, "PIT listed on forwarders standard output.");
+        } else {
+            responseMessage = _create_response(athena, ccnxName, "Unknown command: %s", command);
+        }
 
         parcMemory_Deallocate(&command);
     }
