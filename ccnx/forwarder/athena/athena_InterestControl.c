@@ -321,7 +321,7 @@ _PIT_Command(Athena *athena, CCNxInterest *interest)
                 parcMemory_Deallocate(&toprint);
             }
             parcList_Release(&pitEntries);
-            responseMessage = _create_response(athena, ccnxName, "PIT listed on forwarders standard output.");
+            responseMessage = _create_response(athena, ccnxName, "PIT listed on forwarder output log.");
         } else {
             responseMessage = _create_response(athena, ccnxName, "Unknown command: %s", command);
         }
