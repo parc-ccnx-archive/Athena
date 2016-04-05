@@ -255,6 +255,10 @@ athenaTransportLinkModule_GetMessageBuffer(CCNxMetaMessage *message)
     // If there is no PARCBuffer present, check for an IO vector and convert that into a contiguous buffer.
     if (buffer == NULL) {
         CCNxCodecNetworkBufferIoVec *iovec = ccnxWireFormatMessage_GetIoVec(message);
+        if (iovec == NULL) { // if there's no iovec or buffer, encode the message and return the iovec
+            athena_EncodeMessage(message);
+            iovec = ccnxWireFormatMessage_GetIoVec(message);
+        }
         assertNotNull(iovec, "Null io vector");
         size_t iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
         const struct iovec *array = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
@@ -288,12 +292,17 @@ athenaTransportLinkModule_GetMessageIoVector(CCNxMetaMessage *message)
     // If there was no io vector present, check for a buffer and convert that into an iovec
     if (iovec == NULL) {
         PARCBuffer *buffer = ccnxWireFormatMessage_GetWireFormatBuffer(message);
-        assertNotNull(buffer, "Null message buffer");
-        CCNxCodecNetworkBuffer *netbuff = ccnxCodecNetworkBuffer_Create(&ParcMemoryMemoryBlock, NULL);
-        assertNotNull(netbuff, "Null network buffer allocation");
-        ccnxCodecNetworkBuffer_PutBuffer(netbuff, buffer);
-        iovec = ccnxCodecNetworkBuffer_CreateIoVec(netbuff);
-        ccnxCodecNetworkBuffer_Release(&netbuff);
+        if (buffer == NULL) { // if there's no iovec or buffer, encode the message and return the iovec
+            athena_EncodeMessage(message);
+            iovec = ccnxWireFormatMessage_GetIoVec(message);
+            iovec = ccnxCodecNetworkBufferIoVec_Acquire(iovec);
+        } else {
+            CCNxCodecNetworkBuffer *netbuff = ccnxCodecNetworkBuffer_Create(&ParcMemoryMemoryBlock, NULL);
+            assertNotNull(netbuff, "Null network buffer allocation");
+            ccnxCodecNetworkBuffer_PutBuffer(netbuff, buffer);
+            iovec = ccnxCodecNetworkBuffer_CreateIoVec(netbuff);
+            ccnxCodecNetworkBuffer_Release(&netbuff);
+        }
     } else {
         iovec = ccnxCodecNetworkBufferIoVec_Acquire(iovec);
     }
