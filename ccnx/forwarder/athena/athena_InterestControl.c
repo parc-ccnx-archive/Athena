@@ -258,8 +258,6 @@ _Control_Command_Spawn(Athena *athena, CCNxName *ccnxName, const char *command, 
     }
     parcURI_Release(&connectionURI);
 
-    athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s", connectionSpecification);
-
     pthread_t thread;
     // Passing in a reference that will be released by the new thread as the thread may not
     // have time to acquire a reference itself before we release our reference.
@@ -268,6 +266,8 @@ _Control_Command_Spawn(Athena *athena, CCNxName *ccnxName, const char *command, 
         return responseMessage;
     }
     athena_Release(&newAthena);
+
+    athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s", connectionSpecification);
 
     responseMessage = _create_response(athena, ccnxName, "Athena process thread started on %s", connectionSpecification);
     return responseMessage;
