@@ -119,6 +119,7 @@ typedef struct Athena {
 #define CCNxNameAthenaCommand_FIBAddRoute        CCNxNameAthena_FIB "/" AthenaCommand_Add                     // add route for arguments in payload
 #define CCNxNameAthenaCommand_FIBRemoveRoute     CCNxNameAthena_FIB "/" AthenaCommand_Remove                  // remove route for arguments in payload
 #define CCNxNameAthenaCommand_PITLookup          CCNxNameAthena_PIT "/" AthenaCommand_Lookup                  // return current PIT contents for name in payload
+#define CCNxNameAthenaCommand_PITList            CCNxNameAthena_PIT "/" AthenaCommand_List                    // list current PIT contents
 #define CCNxNameAthenaCommand_ContentStoreResize CCNxNameAthena_ContentStore "/" AthenaCommand_Resize         // resize current content store to size in MB in payload
 #define CCNxNameAthenaCommand_Quit               CCNxNameAthena_Control "/" AthenaCommand_Quit                // ask the forwarder to exit
 #define CCNxNameAthenaCommand_Run                CCNxNameAthena_Control "/" AthenaCommand_Run                 // start a new forwarder instance
