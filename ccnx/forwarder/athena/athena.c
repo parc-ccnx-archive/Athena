@@ -92,8 +92,8 @@ _athenaDestroy(Athena **athena)
     athenaPIT_Release(&((*athena)->athenaPIT));
     athenaFIB_Release(&((*athena)->athenaFIB));
     parcLog_Release(&((*athena)->log));
-    if ((*athena)->configLog) {
-        parcOutputStream_Release(&((*athena)->configLog));
+    if ((*athena)->configurationLog) {
+        parcOutputStream_Release(&((*athena)->configurationLog));
     }
 }
 

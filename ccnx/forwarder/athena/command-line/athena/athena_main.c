@@ -120,7 +120,7 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
                 }
                 PARCFileOutputStream *fileOutputStream = parcFileOutputStream_Create(fd);
                 assertNotNull(fileOutputStream, "File output stream failed (%s)", stateFile);
-                athena->configLog = parcFileOutputStream_AsOutputStream(fileOutputStream);
+                athena->configurationLog = parcFileOutputStream_AsOutputStream(fileOutputStream);
                 parcFileOutputStream_Release(&fileOutputStream);
                 break;
             }

@@ -137,21 +137,21 @@ _create_stats_response(Athena *athena, CCNxName *ccnxName)
 void
 athenaInterestControl_LogConfigurationChange(Athena *athena, CCNxName *ccnxName, const char *format, ...)
 {
-    if (athena->configLog) {
+    if (athena->configurationLog) {
         const char *name = ccnxName_ToString(ccnxName);
-        parcOutputStream_WriteCString(athena->configLog, name);
+        parcOutputStream_WriteCString(athena->configurationLog, name);
         parcMemory_Deallocate(&name);
 
-        char configLogBuffer[MAXPATHLEN] = {0};
+        char configurationLogBuffer[MAXPATHLEN] = {0};
         if (format) {
             va_list ap;
             va_start(ap, format);
 
-            parcOutputStream_WriteCString(athena->configLog, " ");
-            vsprintf(configLogBuffer, format, ap);
-            parcOutputStream_WriteCString(athena->configLog, configLogBuffer);
+            parcOutputStream_WriteCString(athena->configurationLog, " ");
+            vsprintf(configurationLogBuffer, format, ap);
+            parcOutputStream_WriteCString(athena->configurationLog, configurationLogBuffer);
         }
-        parcOutputStream_WriteCString(athena->configLog, "\n");
+        parcOutputStream_WriteCString(athena->configurationLog, "\n");
     }
 }
 
