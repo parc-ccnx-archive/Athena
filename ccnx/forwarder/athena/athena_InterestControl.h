@@ -70,14 +70,17 @@ int athenaInterestControl(Athena *athena, CCNxInterest *interest, PARCBitVector 
  * @discussion
  *
  * @param [in] athena forwarder context
- * @param [in] ccnx interest name
- * @param [in] control message to log, needs to match athenactl syntax
+ * @param [in] ccnx interest control name
+ * @param [in] control message payload to log
  *
  * Example:
  * @code
  * {
  *     Athena *athena = athena_Create();
- *     athenaInterestControl_LogConfigurationChange(athena, ccnxName, "payload");
+ *     CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+ *     const char *connectionSpecification = "tcp://localhost:9695/name=myLoopback";
+ *     athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", connectionSpecification);
+ *     ccnxName_Release(&addLink);
  *     athena_Release(&athena);
  * }
  * @endcode
