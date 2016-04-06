@@ -114,6 +114,9 @@ _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
         while (isspace(*commandPtr)) {
             commandPtr++;
         }
+        if ((*commandPtr == '#') || (*commandPtr == '\0') ) { // Commented line
+            continue;
+        }
         interestName = commandPtr;
 
         // Scan and terminate the interest url
@@ -133,6 +136,10 @@ _parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
 
         // Run the command
         CCNxName *name = ccnxName_CreateFromCString(interestName);
+        if (name == NULL) {
+            printf("Could not parse %s\n", interestName);
+            continue;
+        }
         CCNxInterest *interest = ccnxInterest_CreateSimple(name);
         ccnxName_Release(&name);
 
