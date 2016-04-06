@@ -5,13 +5,13 @@ configure_file(config.h.in config.h @ONLY)
 if ( APPLE )
   set(ATHENA_PLATFORM_MODULES 
     platform/darwin/athena_Ethernet.c
-	)
+    )
 endif()
 
 if( ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" )
   set(ATHENA_PLATFORM_MODULES 
     platform/linux/athena_Ethernet.c
-	)
+    )
 endif()
 
 set(ATHENA_SOURCE_FILES
@@ -28,16 +28,16 @@ set(ATHENA_SOURCE_FILES
     athena_TransportLinkAdapter.c 
     athena_TransportLink.c 
     athena_TransportLinkModule.c 
-	${ATHENA_PLATFORM_MODULES}
-	)
+    ${ATHENA_PLATFORM_MODULES}
+    )
 
 set(ATHENA_HEADER_FILES
     athena.h
     athena_About.h
     athena_ContentStore.h
-	athena_ContentStoreInterface.h
+    athena_ContentStoreInterface.h
     athena_Control.h
-	athena_Ethernet.h
+    athena_Ethernet.h
     athena_FIB.h
     athena_InterestControl.h
     athena_LRUContentStore.h
@@ -47,7 +47,7 @@ set(ATHENA_HEADER_FILES
     athena_TransportLinkModule.h
     athenactl.h
     athenactl_About.h
-	)
+    )
 
 set(LIBATHENA_TCP_SOURCE_FILES
     athena_TransportLinkModuleTCP.c
@@ -59,6 +59,7 @@ set(LIBATHENA_UDP_SOURCE_FILES
 
 set(LIBATHENA_ETH_SOURCE_FILES
     athena_TransportLinkModuleETH.c
+    ${ATHENA_PLATFORM_MODULES}
     )
 
 set(LIBATHENA_TEMPLATE_SOURCE_FILES
@@ -120,9 +121,9 @@ add_subdirectory(command-line)
 
 if ( UNIX )
   execute_process(COMMAND whoami OUTPUT_VARIABLE USER 
-	    OUTPUT_STRIP_TRAILING_WHITESPACE)
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
   if ( ${USER} STREQUAL "root" )
-	add_subdirectory(platform/darwin/test)
-	add_subdirectory(platform/linux/test)
+    add_subdirectory(platform/darwin/test)
+    add_subdirectory(platform/linux/test)
   endif()
 endif()
