@@ -31,11 +31,14 @@
 
 #include <config.h>
 
+#include <stdio.h>
+
 #include "athena.h"
 #include "athena_PIT.h"
 
 #include <ccnx/common/ccnx_NameSegmentNumber.h>
 #include <ccnx/common/ccnx_WireFormatMessage.h>
+#include <ccnx/common/ccnx_ContentObject.h>
 
 #include <parc/algol/parc_Object.h>
 #include <parc/algol/parc_JSON.h>
@@ -895,7 +898,8 @@ athenaPIT_ProcessMessage(const AthenaPIT *athenaPIT, const CCNxMetaMessage *mess
         }
 
         if (responsePayload != NULL) {
-            CCNxContentObject *contentObjectResponse = ccnxContentObject_CreateWithNameAndPayload(ccnxInterest_GetName(interest), responsePayload);
+            CCNxContentObject *contentObjectResponse =
+                ccnxContentObject_CreateWithNameAndPayload(ccnxInterest_GetName(interest), responsePayload);
 
             result = ccnxMetaMessage_CreateFromContentObject(contentObjectResponse);
 
@@ -905,4 +909,61 @@ athenaPIT_ProcessMessage(const AthenaPIT *athenaPIT, const CCNxMetaMessage *mess
     }
 
     return result;  // could be NULL
+}
+
+PARCList *
+athenaPIT_CreateEntryList(const AthenaPIT *athenaPIT)
+{
+    PARCList *result =
+            parcList(parcArrayList_Create((void (*)(void **)) parcBuffer_Release), PARCArrayListAsPARCList);
+
+    char lineStr[512];
+    PARCIterator *it = parcHashMap_CreateValueIterator(athenaPIT->entryTable);
+    snprintf (lineStr, 512, "Name,ingress,egress,KeyIdRestricted,HashRestricted,Nameless");
+    PARCBuffer *line = parcBuffer_AllocateCString(lineStr);
+    parcList_Add(result, (PARCObject *)line);
+    while(parcIterator_HasNext(it)) {
+        _AthenaPITEntry *entry = (_AthenaPITEntry *)parcIterator_Next(it);
+        CCNxName *name = ccnxInterest_GetName(entry->ccnxMessage);
+        char nameStr[256];
+        if (name != NULL) {
+            PARCBufferComposer *composer = parcBufferComposer_Create();
+            composer = ccnxName_BuildString(name, composer);
+            char *temp = parcBufferComposer_ToString(composer);
+            parcBufferComposer_Release(&composer);
+            snprintf(nameStr, 256, "%s", temp);
+            parcMemory_Deallocate(&temp);
+        } else {
+            sprintf(nameStr, "[nameless]");
+        }
+        char *ingressStr = parcBitVector_ToString(entry->ingress);
+        char *egressStr = parcBitVector_ToString(entry->egress);
+        PARCBuffer *contentId =
+            ccnxInterest_GetContentObjectHashRestriction(entry->ccnxMessage);
+        bool hashRestricted = (contentId != NULL);
+        bool keyIdRestricted =
+            (ccnxInterest_GetKeyIdRestriction(entry->ccnxMessage) != NULL);
+        bool nameless = false;
+        if (hashRestricted) {
+            PARCBuffer *testKey = _athenaPIT_createCompoundKey(NULL, contentId);
+            nameless = parcBuffer_Equals(testKey, entry->key);
+            parcBuffer_Release(&testKey);
+        }
+        snprintf (lineStr, 512, "%s,%s,%s,%s,%s,%s",
+                  nameStr,
+                  ingressStr,
+                  egressStr,
+                  (keyIdRestricted ? "true" : "false"),
+                  (hashRestricted ? "true" : "false"),
+                  (nameless ? "true" : "false")
+        );
+        parcMemory_Deallocate(&ingressStr);
+        parcMemory_Deallocate(&egressStr);
+
+        PARCBuffer *line = parcBuffer_AllocateCString(lineStr);
+        parcList_Add(result, (PARCObject *)line);
+    }
+    parcIterator_Release(&it);
+
+    return result;
 }

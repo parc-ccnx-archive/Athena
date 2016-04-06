@@ -220,10 +220,19 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
     if (egressVector != NULL) {
         // If no links are in the egress vector the FIB returned, return a no route interest message
         if (parcBitVector_NumberOfBitsSet(egressVector) == 0) {
-            CCNxInterestReturn *interestReturn = ccnxInterestReturn_Create(interest, CCNxInterestReturn_ReturnCode_NoRoute);
-            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interestReturn, ingressVector);
-            parcBitVector_Release(&result);
-            ccnxInterestReturn_Release(&interestReturn);
+            if (ccnxWireFormatMessage_ConvertInterestToInterestReturn(interest,
+                                                                      CCNxInterestReturn_ReturnCode_NoRoute)) {
+
+                // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
+                parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
+                PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
+                                                                        ingressVector);
+                parcBitVector_Release(&result);
+            } else {
+                const char *name = ccnxName_ToString(ccnxName);
+                parcLog_Error(athena->log, "Unable to return Interest (%s) as InterestReturn (code: NoRoute).", name);
+                parcMemory_Deallocate(&name);
+            }
         } else {
             parcBitVector_SetVector(expectedReturnVector, egressVector);
             PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, egressVector);
@@ -235,10 +244,21 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
         parcBitVector_Release(&egressVector);
     } else {
         // No FIB entry found, return a NoRoute interest return and remove the entry from the PIT.
-        CCNxInterestReturn *interestReturn = ccnxInterestReturn_Create(interest, CCNxInterestReturn_ReturnCode_NoRoute);
-        PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interestReturn, ingressVector);
-        parcBitVector_Release(&result);
-        ccnxInterestReturn_Release(&interestReturn);
+
+        if (ccnxWireFormatMessage_ConvertInterestToInterestReturn(interest,
+                                                                  CCNxInterestReturn_ReturnCode_NoRoute)) {
+
+            // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
+            parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
+            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
+                                                                    ingressVector);
+            parcBitVector_Release(&result);
+        } else {
+            const char *name = ccnxName_ToString(ccnxName);
+            parcLog_Error(athena->log, "Unable to return Interest (%s) as InterestReturn (code: NoRoute).", name);
+            parcMemory_Deallocate(&name);
+        }
+
         const char *name = ccnxName_ToString(ccnxName);
         if (athenaPIT_RemoveInterest(athena->athenaPIT, interest, ingressVector) != true) {
             parcLog_Error(athena->log, "Unable to remove interest (%s) from the PIT.", name);

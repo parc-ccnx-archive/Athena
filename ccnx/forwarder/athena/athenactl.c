@@ -62,6 +62,7 @@
 #define COMMAND_LIST "list"
 #define SUBCOMMAND_LIST_LINKS "links"
 #define SUBCOMMAND_LIST_FIB "fib"
+#define SUBCOMMAND_LIST_PIT "pit"
 #define SUBCOMMAND_LIST_ROUTES "routes"
 #define SUBCOMMAND_LIST_CONNECTIONS "connections"
 
@@ -379,6 +380,23 @@ _athenactl_ListLinks(PARCIdentity *identity, int argc, char **argv)
 }
 
 static int
+_athenactl_ListPIT(PARCIdentity *identity, int argc, char **argv)
+{
+    CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_PITList);
+    CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+
+    const char *result = _athenactl_SendInterestControl(identity, interest);
+    if (result) {
+        printf("%s\n", result);
+        parcMemory_Deallocate(&result);
+    }
+    ccnxMetaMessage_Release(&interest);
+
+    return 0;
+}
+
+static int
 _athenactl_ListFIB(PARCIdentity *identity, int argc, char **argv)
 {
     CCNxName *name = ccnxName_CreateFromCString(CCNxNameAthenaCommand_FIBList);
@@ -440,6 +458,8 @@ _athenactl_List(PARCIdentity *identity, int argc, char **argv)
         return _athenactl_ListFIB(identity, --argc, &argv[1]);
     } else if (strcasecmp(subcommand, SUBCOMMAND_LIST_FIB) == 0) {
         return _athenactl_ListFIB(identity, --argc, &argv[1]);
+    } else if (strcasecmp(subcommand, SUBCOMMAND_LIST_PIT) == 0) {
+        return _athenactl_ListPIT(identity, --argc, &argv[1]);
     }
     printf("usage: list links/connections/routes\n");
     return 1;
