@@ -36,6 +36,7 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
 
 /**

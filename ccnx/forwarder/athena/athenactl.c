@@ -386,7 +386,7 @@ _athenactl_ListPIT(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    const char *result = _athenactl_SendInterestControl(identity, interest);
+    const char *result = athenactl_SendInterestControl(identity, interest);
     if (result) {
         printf("%s\n", result);
         parcMemory_Deallocate(&result);
