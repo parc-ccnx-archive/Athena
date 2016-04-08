@@ -660,6 +660,7 @@ athenaTransportLinkAdapter_Poll(AthenaTransportLinkAdapter *athenaTransportLinkA
                 }
             }
         }
+        events += result;
     }
 
     result = poll(pollfdSendList, pollfdListSize, 0);

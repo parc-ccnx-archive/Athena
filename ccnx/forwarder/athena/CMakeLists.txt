@@ -61,6 +61,10 @@ set(LIBATHENA_ETH_SOURCE_FILES
     athena_TransportLinkModuleETH.c
     )
 
+set(LIBATHENA_ETH1990_SOURCE_FILES
+    athena_TransportLinkModuleETH1990.c
+    )
+
 set(LIBATHENA_TEMPLATE_SOURCE_FILES
     athena_TransportLinkModuleTEMPLATE.c
     )
@@ -86,6 +90,7 @@ source_group(Sources FILES ${ATHENA_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_TCP_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_UDP_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_ETH_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_ETH1990_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 
 add_library(athena_ETH.shared SHARED ${LIBATHENA_ETH_SOURCE_FILES})
@@ -94,6 +99,13 @@ set_target_properties(athena_ETH.shared PROPERTIES
   SOVERSION 1
   VERSION 1.0
   OUTPUT_NAME athena_ETH )
+
+add_library(athena_ETH1990.shared SHARED ${LIBATHENA_ETH1990_SOURCE_FILES})
+set_target_properties(athena_ETH1990.shared PROPERTIES
+  C_STANDARD 99
+  SOVERSION 1
+  VERSION 1.0
+  OUTPUT_NAME athena_ETH1990 )
 
 add_library(athena_TEMPLATE.shared SHARED ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 set_target_properties(athena_TEMPLATE.shared PROPERTIES
@@ -107,6 +119,7 @@ set(athena_libraries
   athena_TCP.shared
   athena_UDP.shared
   athena_ETH.shared
+  athena_ETH1990.shared
   athena_TEMPLATE.shared
   )
 

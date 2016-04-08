@@ -55,6 +55,7 @@
 #include <ccnx/forwarder/athena/athena_Ethernet.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
+#include <ccnx/common/codec/schema_v1/ccnxCodecSchemaV1_FixedHeader.h>
 
 //
 // Private data for each link connection
@@ -65,6 +66,9 @@ typedef struct _connectionPair {
     struct ether_addr peerAddress;
     socklen_t peerAddressLength;
     size_t mtu;
+    uint32_t sendSequenceNumber;
+    uint32_t receiveSequenceNumber;
+    PARCDeque *fragments;
 } _connectionPair;
 
 //
@@ -84,6 +88,204 @@ typedef struct _ETHLinkData {
     } _stats;
     AthenaEthernet *athenaEthernet;
 } _ETHLinkData;
+
+#define METIS_PACKET_TYPE_HOPFRAG 4
+#define T_HOPFRAG_PAYLOAD  0x0005
+
+typedef struct hopbyhop_header {
+    uint8_t version;
+    uint8_t packetType;
+    uint16_t packetLength;
+    uint8_t blob[3];
+    uint8_t headerLength;
+    uint16_t tlvType;
+    uint16_t tlvLength;
+} __attribute__((packed)) _HopByHopHeader;
+
+/*
+ * The B bit value in the top byte of the header
+ */
+#define BMASK 0x40
+
+/*
+ * The E bit value in the top byte of the header
+ */
+#define EMASK 0x20
+
+/*
+ * Sets the B flag in the header
+ */
+#define _hopByHopHeader_SetBFlag(header) ((header)->blob[0] |= BMASK)
+
+/*
+ * Sets the E flag in the header
+ */
+#define _hopByHopHeader_SetEFlag(header) ((header)->blob[0] |= EMASK)
+
+bool
+_ETH1990_IsFragment(PARCBuffer *wireFormatBuffer)
+{
+    bool result = false;
+    _HopByHopHeader *header = parcBuffer_Overlay(wireFormatBuffer, 0);
+    if (header->packetType == METIS_PACKET_TYPE_HOPFRAG) {
+        result = true;
+    }
+    return result;
+}
+
+static void
+_hopByHopHeader_SetPayloadLength(_HopByHopHeader *header, size_t payloadLength)
+{
+    const uint16_t packetLength = sizeof(_HopByHopHeader) + payloadLength;
+
+    header->version = CCNxTlvDictionary_SchemaVersion_V1;
+    header->packetType = METIS_PACKET_TYPE_HOPFRAG;
+    header->packetLength = htons(packetLength);
+    header->headerLength = sizeof(CCNxCodecSchemaV1FixedHeader);
+    header->tlvType = htons(T_HOPFRAG_PAYLOAD);
+    header->tlvLength = htons(payloadLength);
+}
+
+static uint32_t
+_hopByHopHeader_GetSeqnum(const _HopByHopHeader *header)
+{
+    uint32_t seqnum = ((uint32_t) header->blob[0] & 0x0F) << 16 | (uint32_t) header->blob[1] << 8 | header->blob[2];
+    return seqnum;
+}
+
+static void
+_hopByHopHeader_SetSequenceNumber(_HopByHopHeader *header, uint32_t seqnum)
+{
+    header->blob[2] = seqnum & 0xFF;
+    header->blob[1] = (seqnum >> 8) & 0xFF;
+
+    header->blob[0] &= 0xF0;
+    header->blob[0] |= (seqnum >> 16) & 0x0F;
+}
+
+/*
+ * non-zero if the B flag is set
+ */
+#define _hopByHopHeader_GetBFlag(header) ((header)->blob[0] & BMASK)
+
+/*
+ * non-zero if the E flag is set
+ */
+#define _hopByHopHeader_GetEFlag(header) ((header)->blob[0] & EMASK)
+
+PARCBuffer *
+_ETH1990_ReceiveAndReassemble(AthenaTransportLink *athenaTransportLink, PARCBuffer *wireFormatBuffer)
+{
+    assertTrue(wireFormatBuffer != NULL, "Fragment reassembly called with a null buffer");
+
+    struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
+    // Verify the type, and move the buffer beyond the header.
+    _HopByHopHeader *header = parcBuffer_Overlay(wireFormatBuffer, sizeof(_HopByHopHeader));
+    assertTrue(header->packetType == METIS_PACKET_TYPE_HOPFRAG, "ETH1990 Unknown fragment type (%d)", header->packetType);
+
+    // If it's not a sequence number we were expecting, clean everything out and start over.
+    uint32_t seqnum = _hopByHopHeader_GetSeqnum(header);
+    if (seqnum != linkData->link.receiveSequenceNumber) {
+        parcBuffer_Release(&wireFormatBuffer);
+        while (parcDeque_Size(linkData->link.fragments) > 0) {
+            wireFormatBuffer = parcDeque_RemoveFirst(linkData->link.fragments);
+            parcBuffer_Release(&wireFormatBuffer);
+        }
+        linkData->link.receiveSequenceNumber = 0;
+        return NULL;
+    }
+
+    assertTrue(parcDeque_Size(linkData->link.fragments) == seqnum, "Queue size, sequence number mis-match");
+
+    // Gather buffers until we receive an end frame
+    parcDeque_Append(linkData->link.fragments, wireFormatBuffer);
+
+    if (_hopByHopHeader_GetBFlag(header)) {
+        linkData->link.receiveSequenceNumber++;
+    } 
+    if (_hopByHopHeader_GetEFlag(header)) {
+        PARCBuffer *reassembledBuffer = parcBuffer_Allocate(0);
+        while (parcDeque_Size(linkData->link.fragments) > 0) {
+            wireFormatBuffer = parcDeque_RemoveFirst(linkData->link.fragments);
+            const uint8_t *array = parcBuffer_Overlay(wireFormatBuffer, 0);
+            size_t arrayLength = parcBuffer_Remaining(wireFormatBuffer);
+            parcBuffer_Resize(reassembledBuffer, parcBuffer_Capacity(reassembledBuffer) + arrayLength);
+            parcBuffer_PutArray(reassembledBuffer, arrayLength, array);
+            parcBuffer_Release(&wireFormatBuffer);
+        }
+        linkData->link.receiveSequenceNumber = 0;
+        return reassembledBuffer;
+    } else if (!_hopByHopHeader_GetBFlag(header)) {
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Unexpected fragment header flag");
+        while (parcDeque_Size(linkData->link.fragments) > 0) {
+            wireFormatBuffer = parcDeque_RemoveFirst(linkData->link.fragments);
+            parcBuffer_Release(&wireFormatBuffer);
+        }
+        linkData->link.receiveSequenceNumber = 0;
+    }
+
+    return NULL;
+}
+
+static int
+_ETH1990_FragmentAndSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+{
+    struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
+    // Construct our header to prepend
+    struct ether_header etherHeader;
+    memcpy(etherHeader.ether_shost, &(linkData->link.myAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
+    memcpy(etherHeader.ether_dhost, &(linkData->link.peerAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
+    etherHeader.ether_type = htons(athenaEthernet_GetEtherType(linkData->athenaEthernet));
+
+    _HopByHopHeader header = {0};
+    const size_t maxPayload = linkData->link.mtu - sizeof(_HopByHopHeader);
+    _hopByHopHeader_SetBFlag(&header);
+
+    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+    size_t length = parcBuffer_Remaining(wireFormatBuffer);
+    size_t offset = 0;
+    linkData->link.sendSequenceNumber = 0;
+
+    while (offset < length) {
+        int iovcnt = 3;
+        struct iovec iov[iovcnt];
+
+        size_t payloadLength = maxPayload;
+        const size_t remaining = length - offset;
+
+        _hopByHopHeader_SetSequenceNumber(&header, linkData->link.sendSequenceNumber++);
+
+        if (remaining < maxPayload) {
+            payloadLength = remaining;
+            _hopByHopHeader_SetEFlag(&header);
+        }
+
+        _hopByHopHeader_SetPayloadLength(&header, payloadLength);
+
+        iov[0].iov_base = &etherHeader;
+        iov[0].iov_len = sizeof(etherHeader);
+        iov[1].iov_base = &header;
+        iov[1].iov_len = sizeof(_HopByHopHeader);
+        iov[2].iov_base = parcBuffer_Overlay(wireFormatBuffer, payloadLength);
+        iov[2].iov_len = payloadLength;
+
+        ssize_t writeCount = athenaEthernet_Send(linkData->athenaEthernet, iov, iovcnt);
+
+        if (writeCount == -1) {
+            parcBuffer_Release(&wireFormatBuffer);
+            errno = EIO;
+            return -1;
+        }
+
+        offset += payloadLength;
+    }
+
+    parcBuffer_Release(&wireFormatBuffer);
+
+    return 0;
+}
 
 static int
 _stringToEtherAddr(struct ether_addr *address, const char *buffer)
@@ -115,6 +317,7 @@ static _ETHLinkData *
 _ETHLinkData_Create()
 {
     _ETHLinkData *linkData = parcMemory_AllocateAndClear(sizeof(_ETHLinkData));
+    linkData->link.fragments = parcDeque_Create();
     assertNotNull(linkData, "Could not create private data for new link");
     return linkData;
 }
@@ -132,6 +335,13 @@ _ETHLinkData_Destroy(_ETHLinkData **linkData)
             ccnxMetaMessage_Release(&ccnxMetaMessage);
         }
         parcDeque_Release(&((*linkData)->queue));
+    }
+    if ((*linkData)->link.fragments) {
+        while (parcDeque_Size((*linkData)->link.fragments) > 0) {
+            PARCBuffer *wireFormatMessage = parcDeque_RemoveFirst((*linkData)->link.fragments);
+            parcBuffer_Release(&wireFormatMessage);
+        }
+        parcDeque_Release(&((*linkData)->link.fragments));
     }
     if ((*linkData)->multiplexTable) {
         parcHashCodeTable_Destroy(&((*linkData)->multiplexTable));
@@ -205,6 +415,12 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     // Attach the header and populate the iovec
 
     CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
+
+    // If we would exceed our MTU size, fragment the message and send the fragments out
+    if ((ccnxCodecNetworkBufferIoVec_Length(iovec) + sizeof(struct ether_header)) > linkData->link.mtu) {
+        ccnxCodecNetworkBufferIoVec_Release(&iovec);
+        return _ETH1990_FragmentAndSend(athenaTransportLink, ccnxMetaMessage);
+    }
 
     iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
     const struct iovec *networkBufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
@@ -469,6 +685,10 @@ _ETHReceiveMessage(AthenaTransportLink *athenaTransportLink, struct ether_addr *
     PARCBuffer *wireFormatBuffer = parcBuffer_Slice(message);
     parcBuffer_Release(&message);
 
+    if (_ETH1990_IsFragment(wireFormatBuffer)) {
+        wireFormatBuffer = _ETH1990_ReceiveAndReassemble(athenaTransportLink, wireFormatBuffer);
+    }
+
     if (wireFormatBuffer != NULL) {
         // Construct, and return a ccnxMetaMessage from the wire format buffer.
         parcBuffer_SetPosition(wireFormatBuffer, 0);
@@ -497,11 +717,13 @@ _ETHReceive(AthenaTransportLink *athenaTransportLink)
     socklen_t peerAddressLength;
     CCNxMetaMessage *ccnxMetaMessage = _ETHReceiveMessage(athenaTransportLink, &peerAddress, &peerAddressLength);
 
-    // If the souce does not match my configured link peer address, drop the message
-    if (memcmp(&linkData->link.peerAddress, &peerAddress, peerAddressLength) != 0) {
-        linkData->_stats.receive_PeerNotConfigured++;
-        ccnxMetaMessage_Release(&ccnxMetaMessage);
-        return NULL;
+    if (ccnxMetaMessage != NULL) {
+        // If the souce does not match my configured link peer address, drop the message
+        if (memcmp(&linkData->link.peerAddress, &peerAddress, peerAddressLength) != 0) {
+            linkData->_stats.receive_PeerNotConfigured++;
+            ccnxMetaMessage_Release(&ccnxMetaMessage);
+            return NULL;
+        }
     }
 
     return ccnxMetaMessage;
@@ -901,14 +1123,14 @@ _ETHPoll(AthenaTransportLink *athenaTransportLink, int timeout)
 }
 
 PARCArrayList *
-athenaTransportLinkModuleETH_Init()
+athenaTransportLinkModuleETH1990_Init()
 {
     // Module for providing Ethernet links.
     AthenaTransportLinkModule *athenaTransportLinkModule;
     PARCArrayList *moduleList = parcArrayList_Create(NULL);
     assertNotNull(moduleList, "parcArrayList_Create failed to create module list");
 
-    athenaTransportLinkModule = athenaTransportLinkModule_Create("ETH",
+    athenaTransportLinkModule = athenaTransportLinkModule_Create("ETH1990",
                                                                  _ETHOpen,
                                                                  _ETHPoll);
     assertNotNull(athenaTransportLinkModule, "parcMemory_AllocateAndClear failed allocate ETH athenaTransportLinkModule");
@@ -919,6 +1141,6 @@ athenaTransportLinkModuleETH_Init()
 }
 
 void
-athenaTransportLinkModuleETH_Fini()
+athenaTransportLinkModuleETH1990_Fini()
 {
 }

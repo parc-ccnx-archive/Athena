@@ -29,7 +29,7 @@
  * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #include <config.h>
-#include "../athena_TransportLinkModuleETH.c"
+#include "../athena_TransportLinkModuleETH1990.c"
 #include <LongBow/unit-test.h>
 #include <stdio.h>
 
@@ -138,49 +138,49 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose)
 
     athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
-    sprintf(linkSpecificationURI, "eth://%s/name=", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/name=", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name argument");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/local=", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/local=", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad local argument");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/src=", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/src=", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad source argument");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth:///name=ETH_1");
+    sprintf(linkSpecificationURI, "eth1990:///name=ETH_1");
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listene/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/Listene/name=ETH_1", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad argument");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/nameo=", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/Listener/nameo=", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/Listener/name=", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/Listener/name=ETH_1", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
 
@@ -193,7 +193,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose)
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/Listener/name=ETH_1", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded in opening a duplicate link");
@@ -225,7 +225,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
             myAddress.ether_addr_octet[2], myAddress.ether_addr_octet[3],
             myAddress.ether_addr_octet[4], myAddress.ether_addr_octet[5]);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener", device);
+    sprintf(linkSpecificationURI, "eth1990://%s/Listener/name=ETHListener", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
 
@@ -239,8 +239,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     parcURI_Release(&connectionURI);
 
     // Open a link we can send messages on
-    //sprintf(linkSpecificationURI, "eth://%s:%s/name=ETH_1", device, deviceMAC);
-    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1", device);
+    //sprintf(linkSpecificationURI, "eth1990://%s:%s/name=ETH_1", device, deviceMAC);
+    sprintf(linkSpecificationURI, "eth1990://%s/name=ETH_1", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
@@ -306,17 +306,31 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    size_t largePayloadSize = 8192 * 7;
+    size_t numberOfFragments = 4; // four is the maximum that MacOS will queue without a reader
+    size_t mtu = 1500;
+    size_t largePayloadSize = mtu * numberOfFragments;
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
     ccnxInterest_SetPayload(ccnxMetaMessage, payload);
     athena_EncodeMessage(ccnxMetaMessage);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
 
     parcBuffer_Release(&payload);
     parcBitVector_Release(&sendVector);
+    parcBitVector_Release(&resultVector);
+    ccnxMetaMessage_Release(&ccnxMetaMessage);
+
+
+    size_t iterations = numberOfFragments + 5;
+    // Receive the large message
+    do {
+        // Allow a context switch for the sends to complete
+        usleep(1000);
+        ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    } while (iterations-- && (ccnxMetaMessage == NULL));
+    assertNotNull(ccnxMetaMessage, "Could not reassemble fragmented message");
     parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
