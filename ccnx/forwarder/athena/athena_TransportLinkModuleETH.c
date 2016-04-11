@@ -53,6 +53,7 @@
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModuleETH.h>
 #include <ccnx/forwarder/athena/athena_Ethernet.h>
+#include <ccnx/forwarder/athena/athena_EthernetFragmenter.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 
@@ -83,7 +84,10 @@ typedef struct _ETHLinkData {
         size_t send_ShortWrite;
     } _stats;
     AthenaEthernet *athenaEthernet;
+    AthenaEthernetFragmenter *fragmenter;
 } _ETHLinkData;
+
+typedef AthenaEthernetFragmenter *(*ModuleInit)(void);
 
 static int
 _stringToEtherAddr(struct ether_addr *address, const char *buffer)
@@ -136,6 +140,9 @@ _ETHLinkData_Destroy(_ETHLinkData **linkData)
     if ((*linkData)->multiplexTable) {
         parcHashCodeTable_Destroy(&((*linkData)->multiplexTable));
     }
+    if ((*linkData)->fragmenter) {
+        athenaEthernetFragmenter_Release(&((*linkData)->fragmenter));
+    }
     parcMemory_Deallocate(linkData);
 }
 
@@ -186,27 +193,41 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
                       "sending deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
     }
 
-    // Construct our header to prepend
+    // Construct the ethernet header to prepend
     struct ether_header header;
     memcpy(header.ether_shost, &(linkData->link.myAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
     memcpy(header.ether_dhost, &(linkData->link.peerAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
     header.ether_type = htons(athenaEthernet_GetEtherType(linkData->athenaEthernet));
 
-    // An iovec to contain the header and packet data
+    CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
+
+    // If we we're setup to fragment, and the message would exceed our MTU size,
+    // fragment it and send the messages out.
+    if ((ccnxCodecNetworkBufferIoVec_Length(iovec) + sizeof(struct ether_header)) > linkData->link.mtu) {
+        if (linkData->fragmenter) {
+            ccnxCodecNetworkBufferIoVec_Release(&iovec);
+            return athenaEthernetFragmenter_Send(linkData->fragmenter,
+                                                 linkData->athenaEthernet,
+                                                 linkData->link.mtu, &header,
+                                                 ccnxMetaMessage);
+        } else {
+            errno = EMSGSIZE;
+            return -1;
+        }
+    }
+
+    // An iovec to contain the header and packet data for the trivial case
     struct iovec iov[2];
     struct iovec *array = iov;
-    int iovcnt = 2;
     size_t messageLength = 0;
 
     // If the iovec we're prepending to has more than one element, allocatedIovec holds the
     // allocated IO vector of the right size that we must deallocate before returning.
     struct iovec *allocatedIovec = NULL;
 
-    // Attach the header and populate the iovec
+    // Attach our ethernet header and populate the iovec
 
-    CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
-
-    iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
+    int iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
     const struct iovec *networkBufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
 
     // Trivial case, single iovec element.
@@ -237,17 +258,6 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         }
     }
     iovcnt++; // increment for the header
-
-    if (linkData->link.mtu) {
-        if (messageLength > linkData->link.mtu) {
-            if (allocatedIovec != NULL) {
-                parcMemory_Deallocate(&allocatedIovec);
-            }
-            ccnxCodecNetworkBufferIoVec_Release(&iovec);
-            errno = EMSGSIZE;
-            return -1;
-        }
-    }
 
     parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
                   "sending message (size=%d)", messageLength);
@@ -405,6 +415,11 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
     if (demuxLink == NULL) {
         _ETHLinkData *newLinkData = _ETHLinkData_Create();
 
+        // Use the same fragmentation as our parent
+        if (linkData->fragmenter) {
+            newLinkData->fragmenter = athenaEthernetFragmenter_Acquire(linkData->fragmenter);
+        }
+
         // We use our parents fd to send, and receive demux'd messages from our parent on our queue
         newLinkData->athenaEthernet = athenaEthernet_Acquire(linkData->athenaEthernet);
         newLinkData->queue = parcDeque_Create();
@@ -468,6 +483,8 @@ _ETHReceiveMessage(AthenaTransportLink *athenaTransportLink, struct ether_addr *
     parcBuffer_SetPosition(message, sizeof(struct ether_header));
     PARCBuffer *wireFormatBuffer = parcBuffer_Slice(message);
     parcBuffer_Release(&message);
+
+    wireFormatBuffer = athenaEthernetFragmenter_Receive(linkData->fragmenter, wireFormatBuffer);
 
     if (wireFormatBuffer != NULL) {
         // Construct, and return a ccnxMetaMessage from the wire format buffer.
@@ -701,6 +718,16 @@ _ETHOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 #define LINK_MTU_SIZE "mtu%3D"
 #define SRC_LINK_SPECIFIER "src%3D"
 #define ETH_LISTENER_FLAG "listener"
+#define FRAGMENTER "fragmenter%3D"
+
+static int
+_parseFragmenterName(const char *token, char *name)
+{
+    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+        return -1;
+    }
+    return 0;
+}
 
 static int
 _parseLinkName(const char *token, char *name)
@@ -795,6 +822,8 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     bool isListener = false;
     char *linkName = NULL;
     char specifiedLinkName[MAXPATHLEN] = { 0 };
+    char *fragmenterName = NULL;
+    char specifiedFragmenterName[MAXPATHLEN] = { 0 };
     size_t mtu = 0;
     int forceLocal = 0;
 
@@ -810,6 +839,19 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
                 memcpy(&srcMAC, &destMAC, sizeof(struct ether_addr));
             }
             isListener = true;
+            parcMemory_Deallocate(&token);
+            continue;
+        }
+
+        if (strncasecmp(token, FRAGMENTER, strlen(FRAGMENTER)) == 0) {
+            if (_parseFragmenterName(token, specifiedFragmenterName) != 0) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Improper fragmenter name specification (%s)", token);
+                parcMemory_Deallocate(&token);
+                errno = EINVAL;
+                return NULL;
+            }
+            fragmenterName = specifiedFragmenterName;
             parcMemory_Deallocate(&token);
             continue;
         }
@@ -879,6 +921,11 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         } else {
             result = _ETHOpenConnection(athenaTransportLinkModule, linkName, device, NULL, &destMAC, mtu);
         }
+    }
+
+    if (result && fragmenterName) {
+        struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(result);
+        linkData->fragmenter = athenaEthernetFragmenter_Create(fragmenterName);
     }
 
     // forced IsLocal/IsNotLocal, mainly for testing

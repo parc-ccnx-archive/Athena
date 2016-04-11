@@ -5,13 +5,13 @@ configure_file(config.h.in config.h @ONLY)
 if ( APPLE )
   set(ATHENA_PLATFORM_MODULES 
     platform/darwin/athena_Ethernet.c
-	)
+    )
 endif()
 
 if( ${CMAKE_SYSTEM_NAME} STREQUAL "Linux" )
   set(ATHENA_PLATFORM_MODULES 
     platform/linux/athena_Ethernet.c
-	)
+    )
 endif()
 
 set(ATHENA_SOURCE_FILES
@@ -21,6 +21,7 @@ set(ATHENA_SOURCE_FILES
     athenactl_About.c 
     athena_Control.c 
     athena_InterestControl.c 
+    athena_EthernetFragmenter.c 
     athena_FIB.c 
     athena_ContentStore.c 
     athena_LRUContentStore.c 
@@ -28,16 +29,17 @@ set(ATHENA_SOURCE_FILES
     athena_TransportLinkAdapter.c 
     athena_TransportLink.c 
     athena_TransportLinkModule.c 
-	${ATHENA_PLATFORM_MODULES}
-	)
+    ${ATHENA_PLATFORM_MODULES}
+    )
 
 set(ATHENA_HEADER_FILES
     athena.h
     athena_About.h
     athena_ContentStore.h
-	athena_ContentStoreInterface.h
+    athena_ContentStoreInterface.h
     athena_Control.h
-	athena_Ethernet.h
+    athena_Ethernet.h
+    athena_EthernetFragmenter.h
     athena_FIB.h
     athena_InterestControl.h
     athena_LRUContentStore.h
@@ -47,7 +49,7 @@ set(ATHENA_HEADER_FILES
     athena_TransportLinkModule.h
     athenactl.h
     athenactl_About.h
-	)
+    )
 
 set(LIBATHENA_TCP_SOURCE_FILES
     athena_TransportLinkModuleTCP.c
@@ -61,8 +63,8 @@ set(LIBATHENA_ETH_SOURCE_FILES
     athena_TransportLinkModuleETH.c
     )
 
-set(LIBATHENA_ETH1990_SOURCE_FILES
-    athena_TransportLinkModuleETH1990.c
+set(LIBATHENA_ETHFRAGMENT_1990_SOURCE_FILES
+    athena_TransportLinkModuleETHFragmenter_1990.c
     )
 
 set(LIBATHENA_TEMPLATE_SOURCE_FILES
@@ -90,7 +92,7 @@ source_group(Sources FILES ${ATHENA_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_TCP_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_UDP_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_ETH_SOURCE_FILES})
-source_group(Sources FILES ${LIBATHENA_ETH1990_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_ETHFRAGMENT_1990_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 
 add_library(athena_ETH.shared SHARED ${LIBATHENA_ETH_SOURCE_FILES})
@@ -100,12 +102,12 @@ set_target_properties(athena_ETH.shared PROPERTIES
   VERSION 1.0
   OUTPUT_NAME athena_ETH )
 
-add_library(athena_ETH1990.shared SHARED ${LIBATHENA_ETH1990_SOURCE_FILES})
-set_target_properties(athena_ETH1990.shared PROPERTIES
+add_library(athena_ETHFragment_1990.shared SHARED ${LIBATHENA_ETHFRAGMENT_1990_SOURCE_FILES})
+set_target_properties(athena_ETHFragment_1990.shared PROPERTIES
   C_STANDARD 99
   SOVERSION 1
   VERSION 1.0
-  OUTPUT_NAME athena_ETH1990 )
+  OUTPUT_NAME athena_ETHFragment_1990 )
 
 add_library(athena_TEMPLATE.shared SHARED ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 set_target_properties(athena_TEMPLATE.shared PROPERTIES
@@ -119,7 +121,7 @@ set(athena_libraries
   athena_TCP.shared
   athena_UDP.shared
   athena_ETH.shared
-  athena_ETH1990.shared
+  athena_ETHFragment_1990.shared
   athena_TEMPLATE.shared
   )
 
@@ -133,9 +135,9 @@ add_subdirectory(command-line)
 
 if ( UNIX )
   execute_process(COMMAND whoami OUTPUT_VARIABLE USER 
-	    OUTPUT_STRIP_TRAILING_WHITESPACE)
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
   if ( ${USER} STREQUAL "root" )
-	add_subdirectory(platform/darwin/test)
-	add_subdirectory(platform/linux/test)
+    add_subdirectory(platform/darwin/test)
+    add_subdirectory(platform/linux/test)
   endif()
 endif()

@@ -29,7 +29,7 @@
  * @copyright 2015, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #include <config.h>
-#include "../athena_TransportLinkModuleETH1990.c"
+#include "../athena_TransportLinkModuleETHFragmenter_1990.c"
 #include <LongBow/unit-test.h>
 #include <stdio.h>
 
