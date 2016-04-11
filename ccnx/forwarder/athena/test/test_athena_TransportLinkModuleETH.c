@@ -242,7 +242,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     size_t mtu = 1500; // forced MTU size to detect large messages
     // Open a link we can send messages on
     //sprintf(linkSpecificationURI, "eth://%s:%s/name=ETH_1", device, deviceMAC);
-    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/mtu=%d", device, mtu);
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
@@ -353,7 +353,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
             myAddress.ether_addr_octet[4], myAddress.ether_addr_octet[5]);
 
     size_t mtu = 1500; // forced MTU size for fragmentation
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS/mtu=%d", device, mtu);
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
 
