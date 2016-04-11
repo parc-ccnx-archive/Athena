@@ -61,6 +61,12 @@
 #define METIS_PACKET_TYPE_HOPFRAG 4
 #define T_HOPFRAG_PAYLOAD  0x0005
 
+typedef struct _BEFS_private {
+    uint32_t sendSequenceNumber;
+    uint32_t receiveSequenceNumber;
+    PARCDeque *fragments;
+} _BEFS_private;
+
 typedef struct hopbyhop_header {
     uint8_t version;
     uint8_t packetType;
@@ -91,8 +97,14 @@ typedef struct hopbyhop_header {
  */
 #define _hopByHopHeader_SetEFlag(header) ((header)->blob[0] |= EMASK)
 
+_BEFS_private *
+_ETH_BEFS_GetFragmenterData(AthenaEthernetFragmenter *athenaEthernetFragmenter)
+{
+    return (_BEFS_private*)athenaEthernetFragmenter->fragmenterData;
+}
+
 bool
-_ETH1990_IsFragment(PARCBuffer *wireFormatBuffer)
+_ETH_BEFS_IsFragment(PARCBuffer *wireFormatBuffer)
 {
     bool result = false;
     _HopByHopHeader *header = parcBuffer_Overlay(wireFormatBuffer, 0);
@@ -143,68 +155,70 @@ _hopByHopHeader_SetSequenceNumber(_HopByHopHeader *header, uint32_t seqnum)
 #define _hopByHopHeader_GetEFlag(header) ((header)->blob[0] & EMASK)
 
 PARCBuffer *
-_ETH1990_ReceiveAndReassemble(AthenaEthernetFragmenter *athenaEthernetFragmenter, PARCBuffer *wireFormatBuffer)
+_ETH_BEFS_ReceiveAndReassemble(AthenaEthernetFragmenter *athenaEthernetFragmenter, PARCBuffer *wireFormatBuffer)
 {
+    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
     assertTrue(wireFormatBuffer != NULL, "Fragmenter reassembly called with a null buffer");
 
     // If it's not our fragment, send it back
-    if (!_ETH1990_IsFragment(wireFormatBuffer)) {
+    if (!_ETH_BEFS_IsFragment(wireFormatBuffer)) {
         return wireFormatBuffer;
     }
 
     // Verify the type, and move the buffer beyond the header.
     _HopByHopHeader *header = parcBuffer_Overlay(wireFormatBuffer, sizeof(_HopByHopHeader));
-    assertTrue(header->packetType == METIS_PACKET_TYPE_HOPFRAG, "ETH1990 Unknown fragment type (%d)", header->packetType);
+    assertTrue(header->packetType == METIS_PACKET_TYPE_HOPFRAG, "ETH_BEFS Unknown fragment type (%d)", header->packetType);
 
     // If it's not a sequence number we were expecting, clean everything out and start over.
     uint32_t seqnum = _hopByHopHeader_GetSeqnum(header);
-    if (seqnum != athenaEthernetFragmenter->receiveSequenceNumber) {
+    if (seqnum != fragmenterData->receiveSequenceNumber) {
         parcBuffer_Release(&wireFormatBuffer);
-        while (parcDeque_Size(athenaEthernetFragmenter->fragments) > 0) {
-            wireFormatBuffer = parcDeque_RemoveFirst(athenaEthernetFragmenter->fragments);
+        while (parcDeque_Size(fragmenterData->fragments) > 0) {
+            wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
             parcBuffer_Release(&wireFormatBuffer);
         }
-        athenaEthernetFragmenter->receiveSequenceNumber = 0;
+        fragmenterData->receiveSequenceNumber = 0;
         return NULL;
     }
 
-    assertTrue(parcDeque_Size(athenaEthernetFragmenter->fragments) == seqnum, "Queue size, sequence number mis-match");
+    assertTrue(parcDeque_Size(fragmenterData->fragments) == seqnum, "Queue size, sequence number mis-match");
 
     // Gather buffers until we receive an end frame
-    parcDeque_Append(athenaEthernetFragmenter->fragments, wireFormatBuffer);
+    parcDeque_Append(fragmenterData->fragments, wireFormatBuffer);
 
     if (_hopByHopHeader_GetBFlag(header)) {
-        athenaEthernetFragmenter->receiveSequenceNumber++;
+        fragmenterData->receiveSequenceNumber++;
     } 
     if (_hopByHopHeader_GetEFlag(header)) {
         PARCBuffer *reassembledBuffer = parcBuffer_Allocate(0);
-        while (parcDeque_Size(athenaEthernetFragmenter->fragments) > 0) {
-            wireFormatBuffer = parcDeque_RemoveFirst(athenaEthernetFragmenter->fragments);
+        while (parcDeque_Size(fragmenterData->fragments) > 0) {
+            wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
             const uint8_t *array = parcBuffer_Overlay(wireFormatBuffer, 0);
             size_t arrayLength = parcBuffer_Remaining(wireFormatBuffer);
             parcBuffer_Resize(reassembledBuffer, parcBuffer_Capacity(reassembledBuffer) + arrayLength);
             parcBuffer_PutArray(reassembledBuffer, arrayLength, array);
             parcBuffer_Release(&wireFormatBuffer);
         }
-        athenaEthernetFragmenter->receiveSequenceNumber = 0;
+        fragmenterData->receiveSequenceNumber = 0;
         return reassembledBuffer;
     } else if (!_hopByHopHeader_GetBFlag(header)) {
-        while (parcDeque_Size(athenaEthernetFragmenter->fragments) > 0) {
-            wireFormatBuffer = parcDeque_RemoveFirst(athenaEthernetFragmenter->fragments);
+        while (parcDeque_Size(fragmenterData->fragments) > 0) {
+            wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
             parcBuffer_Release(&wireFormatBuffer);
         }
-        athenaEthernetFragmenter->receiveSequenceNumber = 0;
+        fragmenterData->receiveSequenceNumber = 0;
     }
 
     return NULL;
 }
 
 static int
-_ETH1990_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
+_ETH_BEFS_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
                          AthenaEthernet *athenaEthernet,
                          size_t mtu, struct ether_header *etherHeader,
                          CCNxMetaMessage *ccnxMetaMessage)
 {
+    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
     _HopByHopHeader fragmentHeader = {0};
     const size_t maxPayload = mtu - sizeof(_HopByHopHeader);
     _hopByHopHeader_SetBFlag(&fragmentHeader);
@@ -212,7 +226,7 @@ _ETH1990_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
     PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
     size_t length = parcBuffer_Remaining(wireFormatBuffer);
     size_t offset = 0;
-    athenaEthernetFragmenter->sendSequenceNumber = 0;
+    fragmenterData->sendSequenceNumber = 0;
 
     while (offset < length) {
         struct iovec iov[3];
@@ -221,7 +235,7 @@ _ETH1990_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
         size_t payloadLength = maxPayload;
         const size_t remaining = length - offset;
 
-        _hopByHopHeader_SetSequenceNumber(&fragmentHeader, athenaEthernetFragmenter->sendSequenceNumber++);
+        _hopByHopHeader_SetSequenceNumber(&fragmentHeader, fragmenterData->sendSequenceNumber++);
 
         if (remaining < maxPayload) {
             payloadLength = remaining;
@@ -230,12 +244,12 @@ _ETH1990_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
 
         _hopByHopHeader_SetPayloadLength(&fragmentHeader, payloadLength);
 
-        iov[0].iov_base = &etherHeader;
-        iov[0].iov_len = sizeof(etherHeader);
-        iov[1].iov_base = &fragmentHeader;
+        iov[0].iov_len = sizeof(struct ether_header);
+        iov[0].iov_base = etherHeader;
         iov[1].iov_len = sizeof(_HopByHopHeader);
-        iov[2].iov_base = parcBuffer_Overlay(wireFormatBuffer, payloadLength);
+        iov[1].iov_base = &fragmentHeader;
         iov[2].iov_len = payloadLength;
+        iov[2].iov_base = parcBuffer_Overlay(wireFormatBuffer, payloadLength);
 
         ssize_t writeCount = athenaEthernet_Send(athenaEthernet, iov, iovcnt);
 
@@ -254,21 +268,25 @@ _ETH1990_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
 }
 
 static void
-_athenaEthernetFragmenter_1990_Fini(AthenaEthernetFragmenter *athenaEthernetFragmenter)
+_athenaEthernetFragmenter_BEFS_Fini(AthenaEthernetFragmenter *athenaEthernetFragmenter)
 {
-    while (parcDeque_Size(athenaEthernetFragmenter->fragments) > 0) {
-        PARCBuffer *wireFormatBuffer = parcDeque_RemoveFirst(athenaEthernetFragmenter->fragments);
+    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
+    while (parcDeque_Size(fragmenterData->fragments) > 0) {
+        PARCBuffer *wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
         parcBuffer_Release(&wireFormatBuffer);
     }
-    parcDeque_Release(&(athenaEthernetFragmenter->fragments));
+    parcDeque_Release(&(fragmenterData->fragments));
+    parcMemory_Deallocate(&(fragmenterData));
 }
 
 AthenaEthernetFragmenter *
-athenaEthernetFragmenter_1990_Init(AthenaEthernetFragmenter *athenaEthernetFragmenter)
+athenaEthernetFragmenter_BEFS_Init(AthenaEthernetFragmenter *athenaEthernetFragmenter)
 {
-    athenaEthernetFragmenter->fragments = parcDeque_Create();
-    athenaEthernetFragmenter->send = (AthenaEthernetFragmenter_Send *)_ETH1990_FragmentAndSend;
-    athenaEthernetFragmenter->receive = (AthenaEthernetFragmenter_Receive *)_ETH1990_ReceiveAndReassemble;
-    athenaEthernetFragmenter->fini = (AthenaEthernetFragmenter_Fini *)_athenaEthernetFragmenter_1990_Fini;
+    athenaEthernetFragmenter->fragmenterData = parcMemory_Allocate(sizeof(_BEFS_private));
+    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
+    fragmenterData->fragments = parcDeque_Create();
+    athenaEthernetFragmenter->send = (AthenaEthernetFragmenter_Send *)_ETH_BEFS_FragmentAndSend;
+    athenaEthernetFragmenter->receive = (AthenaEthernetFragmenter_Receive *)_ETH_BEFS_ReceiveAndReassemble;
+    athenaEthernetFragmenter->fini = (AthenaEthernetFragmenter_Fini *)_athenaEthernetFragmenter_BEFS_Fini;
     return athenaEthernetFragmenter;
 }

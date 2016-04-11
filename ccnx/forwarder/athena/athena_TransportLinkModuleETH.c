@@ -204,8 +204,8 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     // If we we're setup to fragment, and the message would exceed our MTU size,
     // fragment it and send the messages out.
     if ((ccnxCodecNetworkBufferIoVec_Length(iovec) + sizeof(struct ether_header)) > linkData->link.mtu) {
+        ccnxCodecNetworkBufferIoVec_Release(&iovec);
         if (linkData->fragmenter) {
-            ccnxCodecNetworkBufferIoVec_Release(&iovec);
             return athenaEthernetFragmenter_Send(linkData->fragmenter,
                                                  linkData->athenaEthernet,
                                                  linkData->link.mtu, &header,

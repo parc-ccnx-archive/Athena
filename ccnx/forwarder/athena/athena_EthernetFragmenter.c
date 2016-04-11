@@ -28,6 +28,13 @@
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
  * @copyright 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
+
+/*
+ * Provide support for loadable ethernet fragmentation modules.  The fragmenter library is named
+ * libathena_ETHFragmenter_<name>, and must contain an initialization routine that is named
+ * athenaEthernetFrabmenter_<name>_Init, which is provided an allocated AthenaEthernetFragmenter instance
+ * that is used to maintain private instance state for the fragmentation module.
+ */
 #include <config.h>
 
 #include <LongBow/runtime.h>

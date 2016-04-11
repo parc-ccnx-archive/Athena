@@ -351,7 +351,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
             myAddress.ether_addr_octet[2], myAddress.ether_addr_octet[3],
             myAddress.ether_addr_octet[4], myAddress.ether_addr_octet[5]);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=1990", device);
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
 
@@ -365,7 +365,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     parcURI_Release(&connectionURI);
 
     // Open a link we can send messages on
-    sprintf(linkSpecificationURI, "eth1990://%s/name=ETH_1/fragmenter=1990", device);
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/fragmenter=BEFS", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
