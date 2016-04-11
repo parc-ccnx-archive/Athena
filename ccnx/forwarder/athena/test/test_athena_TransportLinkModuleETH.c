@@ -239,9 +239,10 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
+    size_t mtu = 1500; // forced MTU size to detect large messages
     // Open a link we can send messages on
     //sprintf(linkSpecificationURI, "eth://%s:%s/name=ETH_1", device, deviceMAC);
-    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/mtu=%d", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
@@ -307,7 +308,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    size_t largePayloadSize = 8192 * 7;
+    size_t largePayloadSize = mtu * 2;
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
     ccnxInterest_SetPayload(ccnxMetaMessage, payload);
@@ -351,7 +352,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
             myAddress.ether_addr_octet[2], myAddress.ether_addr_octet[3],
             myAddress.ether_addr_octet[4], myAddress.ether_addr_octet[5]);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS", device);
+    size_t mtu = 1500; // forced MTU size for fragmentation
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS/mtu=%d", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
 
@@ -390,7 +392,6 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     // Try to send a large (>mtu) message
 
     size_t numberOfFragments = 4; // four is the maximum that MacOS will queue without a reader
-    size_t mtu = 1500;
     size_t largePayloadSize = mtu * numberOfFragments;
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);

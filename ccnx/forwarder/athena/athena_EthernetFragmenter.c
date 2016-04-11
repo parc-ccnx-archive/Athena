@@ -113,8 +113,6 @@ _nameToLibrary(const char *name)
     return result;
 }
 
-typedef AthenaEthernetFragmenter *(*ModuleInit)(AthenaEthernetFragmenter *);
-
 static void
 _destroy(AthenaEthernetFragmenter **athenaEthernetFragmenter)
 {
@@ -144,7 +142,7 @@ athenaEthernetFragmenter_Create(const char *fragmenterName)
     }
 
     const char *initEntry = _nameToInitMethod(fragmenterName);
-    ModuleInit _init = dlsym(athenaEthernetFragmenter->module, initEntry);
+    AthenaEthernetFragmenter_Init *_init = dlsym(athenaEthernetFragmenter->module, initEntry);
     parcMemory_Deallocate(&initEntry);
 
     if (_init == NULL) {

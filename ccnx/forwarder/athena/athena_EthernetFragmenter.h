@@ -72,9 +72,6 @@ typedef void (AthenaEthernetFragmenter_Fini)(AthenaEthernetFragmenter *athenaEth
 //
 struct AthenaEthernetFragmenter {
     void *module; // so library can be unloaded
-    //uint32_t sendSequenceNumber;
-    //uint32_t receiveSequenceNumber;
-    //PARCDeque *fragments;
     AthenaEthernetFragmenter_Send *send;
     AthenaEthernetFragmenter_Receive *receive;
     AthenaEthernetFragmenter_Fini *fini;
