@@ -71,6 +71,7 @@ typedef void (AthenaEthernetFragmenter_Fini)(AthenaEthernetFragmenter *athenaEth
 // Private data for each fragmented connection
 //
 struct AthenaEthernetFragmenter {
+    AthenaTransportLink *athenaTransportLink; // link associated with fragmenter
     void *module; // so library can be unloaded
     AthenaEthernetFragmenter_Send *send;
     AthenaEthernetFragmenter_Receive *receive;
@@ -82,18 +83,19 @@ struct AthenaEthernetFragmenter {
  * @abstract create a new fragmenter instance
  * @discussion
  *
- * @param [in] name of new fragmenter
+ * @param [in] athenaTransportLink associated with the fragmenter
+ * @param [in] fragmenterName of new fragmenter
  * @return pointer to new instance
  *
  * Example:
  * @code
  * void
  * {
- *     AthenaEthernetFragmenter *athenaEthernetFragmenter = athenaEthernetFragmenter_Create("BEFS");
+ *     AthenaEthernetFragmenter *athenaEthernetFragmenter = athenaEthernetFragmenter_Create(athenaTransportLink, "BEFS");
  * }
  * @endcode
  */
-AthenaEthernetFragmenter *athenaEthernetFragmenter_Create(const char *fragmenterName);
+AthenaEthernetFragmenter *athenaEthernetFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fragmenterName);
 
 /**
  * @abstract obtain a new reference to a fragmenter instance

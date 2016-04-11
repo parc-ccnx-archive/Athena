@@ -30,10 +30,10 @@
  */
 
 /*
- * Provide support for loadable ethernet fragmentation modules.  The fragmenter library is named
+ * Provide support for loadable ethernet fragmentation modules.  The fragmenter library must be named
  * libathena_ETHFragmenter_<name>, and must contain an initialization routine that is named
- * athenaEthernetFrabmenter_<name>_Init, which is provided an allocated AthenaEthernetFragmenter instance
- * that is used to maintain private instance state for the fragmentation module.
+ * athenaEthernetFrabmenter_<name>_Init.  The init routine is provided an AthenaEthernetFragmenter
+ * object instance that is used to maintain private instance state for the fragmentation module.
  */
 #include <config.h>
 
@@ -122,15 +122,18 @@ _destroy(AthenaEthernetFragmenter **athenaEthernetFragmenter)
     if ((*athenaEthernetFragmenter)->module) {
         dlclose((*athenaEthernetFragmenter)->module);
     }
+    athenaTransportLink_Release(&((*athenaEthernetFragmenter)->athenaTransportLink));
 }
 
 parcObject_ExtendPARCObject(AthenaEthernetFragmenter, _destroy, NULL, NULL, NULL, NULL, NULL, NULL);
 
 AthenaEthernetFragmenter *
-athenaEthernetFragmenter_Create(const char *fragmenterName)
+athenaEthernetFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fragmenterName)
 {
     AthenaEthernetFragmenter *athenaEthernetFragmenter = parcObject_CreateAndClearInstance(AthenaEthernetFragmenter);
+    assertNotNull(athenaEthernetFragmenter, "Could not create a new fragmenter instance.");
 
+    athenaEthernetFragmenter->athenaTransportLink = athenaTransportLink_Acquire(athenaTransportLink);
     const char *moduleLibrary = _nameToLibrary(fragmenterName);
     athenaEthernetFragmenter->module = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
     parcMemory_Deallocate(&moduleLibrary);

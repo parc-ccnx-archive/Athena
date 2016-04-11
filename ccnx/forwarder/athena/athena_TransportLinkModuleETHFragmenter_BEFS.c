@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
+ * Copyright (c) 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,81 +26,61 @@
  */
 /**
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
- * @copyright 2015-2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
+ * @copyright 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
 #include <config.h>
 
 #include <LongBow/runtime.h>
 
-#include <poll.h>
-#include <fcntl.h>
 #include <errno.h>
-#include <netdb.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <net/ethernet.h>
-#include <stdio.h>
-#ifdef __linux__
-#include <netinet/ether.h>
-#endif
 
-#include <parc/algol/parc_Network.h>
 #include <parc/algol/parc_Deque.h>
-#include <parc/algol/parc_HashCodeTable.h>
-#include <parc/algol/parc_Hash.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
-#include <ccnx/forwarder/athena/athena_TransportLinkModuleETH.h>
 #include <ccnx/forwarder/athena/athena_EthernetFragmenter.h>
-#include <ccnx/forwarder/athena/athena_Ethernet.h>
+#include <ccnx/forwarder/athena/athena_TransportLinkModuleETHFragmenter_BEFS.h>
 
-#include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 #include <ccnx/common/codec/schema_v1/ccnxCodecSchemaV1_FixedHeader.h>
 
-#define METIS_PACKET_TYPE_HOPFRAG 4
-#define T_HOPFRAG_PAYLOAD  0x0005
+/*
+ * Fragmenter module supporting the point to point fragmentation described in:
+ *
+ *    ICN "Begin-End" Hop by Hop Fragmentation (draft-mosko-icnrg-beginendfragment-00)
+ */
 
-typedef struct _BEFS_private {
+/*
+ * Private data used to sequence and reassemble fragments.
+ */
+typedef struct _BEFS_fragmenterData {
     uint32_t sendSequenceNumber;
     uint32_t receiveSequenceNumber;
     PARCDeque *fragments;
-} _BEFS_private;
+} _BEFS_fragmenterData;
 
-typedef struct hopbyhop_header {
-    uint8_t version;
-    uint8_t packetType;
-    uint16_t packetLength;
-    uint8_t blob[3];
-    uint8_t headerLength;
-    uint16_t tlvType;
-    uint16_t tlvLength;
-} __attribute__((packed)) _HopByHopHeader;
+_BEFS_fragmenterData *
+_ETH_BEFS_CreateFragmenterData()
+{
+    _BEFS_fragmenterData *fragmenterData = parcMemory_Allocate(sizeof(_BEFS_fragmenterData));
+    fragmenterData->fragments = parcDeque_Create();
+    return fragmenterData;
+}
 
-/*
- * The B bit value in the top byte of the header
- */
-#define BMASK 0x40
-
-/*
- * The E bit value in the top byte of the header
- */
-#define EMASK 0x20
-
-/*
- * Sets the B flag in the header
- */
-#define _hopByHopHeader_SetBFlag(header) ((header)->blob[0] |= BMASK)
-
-/*
- * Sets the E flag in the header
- */
-#define _hopByHopHeader_SetEFlag(header) ((header)->blob[0] |= EMASK)
-
-_BEFS_private *
+_BEFS_fragmenterData *
 _ETH_BEFS_GetFragmenterData(AthenaEthernetFragmenter *athenaEthernetFragmenter)
 {
-    return (_BEFS_private*)athenaEthernetFragmenter->fragmenterData;
+    return (_BEFS_fragmenterData*)athenaEthernetFragmenter->fragmenterData;
+}
+
+void
+_ETH_BEFS_DestroyFragmenterData(AthenaEthernetFragmenter *athenaEthernetFragmenter)
+{
+    _BEFS_fragmenterData *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
+    while (parcDeque_Size(fragmenterData->fragments) > 0) {
+        PARCBuffer *wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
+        parcBuffer_Release(&wireFormatBuffer);
+    }
+    parcDeque_Release(&(fragmenterData->fragments));
+    parcMemory_Deallocate(&fragmenterData);
 }
 
 bool
@@ -114,6 +94,9 @@ _ETH_BEFS_IsFragment(PARCBuffer *wireFormatBuffer)
     return result;
 }
 
+/*
+ * Methods for setting up and reading information from the hop by hop header
+ */
 static void
 _hopByHopHeader_SetPayloadLength(_HopByHopHeader *header, size_t payloadLength)
 {
@@ -145,25 +128,20 @@ _hopByHopHeader_SetSequenceNumber(_HopByHopHeader *header, uint32_t seqnum)
 }
 
 /*
- * non-zero if the B flag is set
+ * Determine if it's a packet that we own, and if so, perform the fragmentation protocol, otherwise
+ * send the packet back so that it can be handled by someone else.  If we return null, we've retained
+ * the message along with it's ownership.
  */
-#define _hopByHopHeader_GetBFlag(header) ((header)->blob[0] & BMASK)
-
-/*
- * non-zero if the E flag is set
- */
-#define _hopByHopHeader_GetEFlag(header) ((header)->blob[0] & EMASK)
-
 PARCBuffer *
 _ETH_BEFS_ReceiveAndReassemble(AthenaEthernetFragmenter *athenaEthernetFragmenter, PARCBuffer *wireFormatBuffer)
 {
-    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
-    assertTrue(wireFormatBuffer != NULL, "Fragmenter reassembly called with a null buffer");
-
-    // If it's not our fragment, send it back
+    // If it's not a fragment type we recognize, send it back for others to process
     if (!_ETH_BEFS_IsFragment(wireFormatBuffer)) {
         return wireFormatBuffer;
     }
+
+    _BEFS_fragmenterData *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
+    assertTrue(wireFormatBuffer != NULL, "Fragmenter reassembly called with a null buffer");
 
     // Verify the type, and move the buffer beyond the header.
     _HopByHopHeader *header = parcBuffer_Overlay(wireFormatBuffer, sizeof(_HopByHopHeader));
@@ -218,7 +196,7 @@ _ETH_BEFS_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
                          size_t mtu, struct ether_header *etherHeader,
                          CCNxMetaMessage *ccnxMetaMessage)
 {
-    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
+    _BEFS_fragmenterData *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
     _HopByHopHeader fragmentHeader = {0};
     const size_t maxPayload = mtu - sizeof(_HopByHopHeader);
     _hopByHopHeader_SetBFlag(&fragmentHeader);
@@ -270,21 +248,13 @@ _ETH_BEFS_FragmentAndSend(AthenaEthernetFragmenter *athenaEthernetFragmenter,
 static void
 _athenaEthernetFragmenter_BEFS_Fini(AthenaEthernetFragmenter *athenaEthernetFragmenter)
 {
-    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
-    while (parcDeque_Size(fragmenterData->fragments) > 0) {
-        PARCBuffer *wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
-        parcBuffer_Release(&wireFormatBuffer);
-    }
-    parcDeque_Release(&(fragmenterData->fragments));
-    parcMemory_Deallocate(&(fragmenterData));
+    _ETH_BEFS_DestroyFragmenterData(athenaEthernetFragmenter);
 }
 
 AthenaEthernetFragmenter *
 athenaEthernetFragmenter_BEFS_Init(AthenaEthernetFragmenter *athenaEthernetFragmenter)
 {
-    athenaEthernetFragmenter->fragmenterData = parcMemory_Allocate(sizeof(_BEFS_private));
-    _BEFS_private *fragmenterData = _ETH_BEFS_GetFragmenterData(athenaEthernetFragmenter);
-    fragmenterData->fragments = parcDeque_Create();
+    athenaEthernetFragmenter->fragmenterData = _ETH_BEFS_CreateFragmenterData();
     athenaEthernetFragmenter->send = (AthenaEthernetFragmenter_Send *)_ETH_BEFS_FragmentAndSend;
     athenaEthernetFragmenter->receive = (AthenaEthernetFragmenter_Receive *)_ETH_BEFS_ReceiveAndReassemble;
     athenaEthernetFragmenter->fini = (AthenaEthernetFragmenter_Fini *)_athenaEthernetFragmenter_BEFS_Fini;

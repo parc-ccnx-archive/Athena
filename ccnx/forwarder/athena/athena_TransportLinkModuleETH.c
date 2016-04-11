@@ -925,7 +925,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
     if (result && fragmenterName) {
         struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(result);
-        linkData->fragmenter = athenaEthernetFragmenter_Create(fragmenterName);
+        linkData->fragmenter = athenaEthernetFragmenter_Create(result, fragmenterName);
     }
 
     // forced IsLocal/IsNotLocal, mainly for testing
