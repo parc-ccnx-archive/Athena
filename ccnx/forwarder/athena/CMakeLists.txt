@@ -60,6 +60,8 @@ set(LIBATHENA_UDP_SOURCE_FILES
     )
 
 set(LIBATHENA_ETH_SOURCE_FILES
+    athena_EthernetFragmenter.c 
+    ${ATHENA_PLATFORM_MODULES}
     athena_TransportLinkModuleETH.c
     )
 
