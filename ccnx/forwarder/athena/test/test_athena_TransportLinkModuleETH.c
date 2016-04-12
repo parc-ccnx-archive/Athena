@@ -353,6 +353,13 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
             myAddress.ether_addr_octet[4], myAddress.ether_addr_octet[5]);
 
     size_t mtu = 1500; // forced MTU size for fragmentation
+
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=XXXX/mtu=%zu", device, mtu);
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad fragmenter");
+    parcURI_Release(&connectionURI);
+
     sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -367,7 +374,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     parcURI_Release(&connectionURI);
 
     // Open a link we can send messages on
-    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/fragmenter=BEFS", device);
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/fragmenter=BEFS/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
@@ -391,8 +398,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 
     // Try to send a large (>mtu) message
 
-    size_t numberOfFragments = 4; // four is the maximum that MacOS will queue without a reader
-    size_t largePayloadSize = mtu * numberOfFragments;
+#ifdef __linux__
+    size_t largePayloadSize = 0xffdd; // Maximum payload size
+#else // MacOS
+    size_t largePayloadSize = mtu * 4; // four is the maximum that MacOS will queue without a reader
+#endif
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
     ccnxInterest_SetPayload(ccnxMetaMessage, payload);
@@ -406,7 +416,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
-    size_t iterations = numberOfFragments + 5;
+    size_t iterations = (largePayloadSize / mtu) + 5;
     // Receive the large message
     do {
         // Allow a context switch for the sends to complete

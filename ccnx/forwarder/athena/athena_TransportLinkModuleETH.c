@@ -87,8 +87,6 @@ typedef struct _ETHLinkData {
     AthenaEthernetFragmenter *fragmenter;
 } _ETHLinkData;
 
-typedef AthenaEthernetFragmenter *(*ModuleInit)(void);
-
 static int
 _stringToEtherAddr(struct ether_addr *address, const char *buffer)
 {
@@ -933,6 +931,12 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     if (result && fragmenterName) {
         struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(result);
         linkData->fragmenter = athenaEthernetFragmenter_Create(result, fragmenterName);
+        if (linkData->fragmenter == NULL) {
+            parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                          "Failed to open/initialize %s fragmenter for %s", fragmenterName, linkName);
+            athenaTransportLink_Close(result);
+            return NULL;
+        }
     }
 
     // forced IsLocal/IsNotLocal, mainly for testing
