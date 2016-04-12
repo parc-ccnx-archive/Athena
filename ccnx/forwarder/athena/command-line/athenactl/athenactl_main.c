@@ -34,9 +34,12 @@
 
 #include <config.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
-#include <stdio.h>
+#include <errno.h>
+#include <ctype.h>
+#include <sys/param.h>
 
 #include <LongBow/runtime.h>
 
@@ -71,6 +74,7 @@ _usage(void)
     printf("    -a | --address  Forwarder connection address (default: tcp://localhost:9695)\n");
     printf("    -f | --identity  The file name containing a PKCS12 keystore\n");
     printf("    -p | --password  The password to unlock the keystore\n");
+    printf("    -i | --config  File containing configuration commands\n");
     printf("    <command> The forwarder command to execute\n");
 }
 
@@ -81,19 +85,87 @@ static char *keystorePassword = NULL;
 static struct option longopts[] = {
     { "address",  required_argument, NULL, 'a' },
     { "identity", required_argument, NULL, 'f' },
+    { "config",   required_argument, NULL, 'i' },
     { "password", required_argument, NULL, 'p' },
     { "version",  no_argument,       NULL, 'v' },
     { "help",     no_argument,       NULL, 'h' },
     { NULL,       0,                 NULL, 0   }
 };
 
+static int
+_parseConfigurationFile(PARCIdentity *identity, const char *configurationFile)
+{
+    char configLine[MAXPATHLEN];
+    char *interestName = NULL;
+    char *interestPayload = NULL;
+    int lineNumber = 0;
+    const char *result = 0;
+
+    FILE *input = fopen(configurationFile, "r");
+    if (input == NULL) {
+        printf("Could not open %s: %s\n", configurationFile, strerror(errno));
+        return -1;
+    }
+
+    while (fgets(configLine, MAXPATHLEN, input)) {
+        char *commandPtr = configLine;
+
+        // Skip initial white space, if any
+        while (isspace(*commandPtr)) {
+            commandPtr++;
+        }
+        if ((*commandPtr == '#') || (*commandPtr == '\0') ) { // Commented line
+            continue;
+        }
+        interestName = commandPtr;
+
+        // Scan and terminate the interest url
+        while (*commandPtr && (!isspace(*commandPtr))) {
+            commandPtr++;
+        }
+
+        // Scan and terminate the payload, if any
+        if (*commandPtr) {
+            *commandPtr++ = '\0';
+            interestPayload = commandPtr;
+        }
+        while (*commandPtr && (*commandPtr != '\n')) {
+            commandPtr++;
+        }
+        *commandPtr = '\0';
+
+        // Run the command
+        CCNxName *name = ccnxName_CreateFromCString(interestName);
+        if (name == NULL) {
+            printf("Could not parse %s\n", interestName);
+            continue;
+        }
+        CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+        ccnxName_Release(&name);
+
+        if (interestPayload) {
+            PARCBuffer *payload = parcBuffer_AllocateCString(interestPayload);
+            ccnxInterest_SetPayload(interest, payload);
+            parcBuffer_Release(&payload);
+        }
+        printf("[%d] %s %s\n", lineNumber++, interestName, interestPayload);
+        result = athenactl_SendInterestControl(identity, interest);
+        if (result) {
+            printf("%s\n", result);
+        }
+    }
+    fclose(input);
+    return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
-    int result;
+    int result = 0;
+    char *configurationFile = NULL;
 
     int ch;
-    while ((ch = getopt_long(argc, argv, "a:f:p:hv", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, "a:f:i:p:hv", longopts, NULL)) != -1) {
         switch (ch) {
             case 'f':
                 keystoreFile = optarg;
@@ -105,6 +177,10 @@ main(int argc, char *argv[])
 
             case 'a':
                 setenv(FORWARDER_CONNECTION_ENV, optarg, 1);
+                break;
+
+            case 'i':
+                configurationFile = optarg;
                 break;
 
             case 'v':
@@ -146,7 +222,15 @@ main(int argc, char *argv[])
     PARCIdentity *identity = parcIdentity_Create(identityFile, PARCIdentityFileAsPARCIdentity);
     parcIdentityFile_Release(&identityFile);
 
-    result = athenactl_Command(identity, argc, argv);
+    if (configurationFile) {
+        if (_parseConfigurationFile(identity, configurationFile) != 0) {
+             exit(1);
+        }
+    }
+
+    if (argc > 0) {
+        result = athenactl_Command(identity, argc, argv);
+    }
 
     parcIdentity_Release(&identity);
     keystoreParams_Destroy(&keystoreParams);

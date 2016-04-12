@@ -34,16 +34,18 @@
 
 #include <config.h>
 
+#include <stdio.h>
 #include <pthread.h>
 #include <getopt.h>
 #include <netdb.h>
 #include <errno.h>
 #include <sys/param.h>
 #include <sys/utsname.h>
-#include <stdio.h>
+#include <fcntl.h>
 
 #include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/forwarder/athena/athena_About.h>
+#include <ccnx/forwarder/athena/athena_InterestControl.h>
 
 static char *_athenaDefaultConnectionURI = AthenaDefaultConnectionURI;
 static size_t _contentStoreSizeInMB = AthenaDefaultContentStoreSize;
@@ -61,16 +63,21 @@ _athenaLogo()
 static void
 _usage()
 {
-    printf("usage: athena [-c <protocol>://<address>:<port>[/listener][/name=<name>][/local=<bool>]] [-s contentStoreSize(MBs)] [--debug]\n");
+    printf("usage: athena [-c <protocol>://<address>:<port>[/listener][/name=<name>][/local=<bool>]] [-s storeSize] [-o stateFile] [-d]\n");
+    printf("    -c | --connect    Transport link specification to create\n");
+    printf("    -s | --store      Size of the content store in mega bytes\n");
+    printf("    -o | --statefile  File to contain configuration state changes\n");
+    printf("    -d | --debug      Turn on debug logging\n");
 }
 
 static struct option options[] = {
-    { .name = "store",   .has_arg = optional_argument, .flag = NULL, .val = 's' },
-    { .name = "connect", .has_arg = optional_argument, .flag = NULL, .val = 'c' },
-    { .name = "help",    .has_arg = no_argument,       .flag = NULL, .val = 'h' },
-    { .name = "version", .has_arg = no_argument,       .flag = NULL, .val = 'v' },
-    { .name = "debug",   .has_arg = no_argument,       .flag = NULL, .val = 'd' },
-    { .name = NULL,      .has_arg = 0,                 .flag = NULL, .val = 0   },
+    { .name = "store",     .has_arg = optional_argument, .flag = NULL, .val = 's' },
+    { .name = "connect",   .has_arg = optional_argument, .flag = NULL, .val = 'c' },
+    { .name = "statefile", .has_arg = optional_argument, .flag = NULL, .val = 'o' },
+    { .name = "help",      .has_arg = no_argument,       .flag = NULL, .val = 'h' },
+    { .name = "version",   .has_arg = no_argument,       .flag = NULL, .val = 'v' },
+    { .name = "debug",     .has_arg = no_argument,       .flag = NULL, .val = 'd' },
+    { .name = NULL,        .has_arg = 0,                 .flag = NULL, .val = 0   },
 };
 
 static void
@@ -79,7 +86,7 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
     int c;
     bool interfaceConfigured = false;
 
-    while ((c = getopt_long(argc, argv, "hs:c:vd", options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hs:c:o:vd", options, NULL)) != -1) {
         switch (c) {
             case 's': {
                 int sizeInMB = atoi(optarg);
@@ -97,8 +104,24 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
                     parcURI_Release(&connectionURI);
                     exit(EXIT_FAILURE);
                 }
+                CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+                athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", optarg);
+                ccnxName_Release(&addLink);
                 parcURI_Release(&connectionURI);
                 interfaceConfigured = true;
+                break;
+            }
+            case 'o': {
+                const char *stateFile = optarg;
+                int fd = open(stateFile, O_CREAT|O_WRONLY|O_TRUNC, 0600);
+                if (fd < 0) {
+                    parcLog_Error(athena->log, "Unable to open %s: %s", stateFile, strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                PARCFileOutputStream *fileOutputStream = parcFileOutputStream_Create(fd);
+                assertNotNull(fileOutputStream, "File output stream failed (%s)", stateFile);
+                athena->configurationLog = parcFileOutputStream_AsOutputStream(fileOutputStream);
+                parcFileOutputStream_Release(&fileOutputStream);
                 break;
             }
             case 'v':
@@ -129,6 +152,9 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
             parcURI_Release(&connectionURI);
             exit(EXIT_FAILURE);
         }
+        CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+        athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", _athenaDefaultConnectionURI);
+        ccnxName_Release(&addLink);
         parcURI_Release(&connectionURI);
         struct utsname name;
         if (uname(&name) == 0) {
@@ -138,6 +164,10 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
             PARCURI *nodeURI = parcURI_Parse(nodeURIspecification);
             if (athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, nodeURI) == NULL) {
                 parcURI_Release(&nodeURI);
+            } else {
+                CCNxName *addLink = ccnxName_CreateFromCString(CCNxNameAthenaCommand_LinkConnect);
+                athenaInterestControl_LogConfigurationChange(athena, addLink, "%s", nodeURIspecification);
+                ccnxName_Release(&addLink);
             }
         }
     }

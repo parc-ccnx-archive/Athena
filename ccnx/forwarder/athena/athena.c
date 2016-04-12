@@ -92,6 +92,9 @@ _athenaDestroy(Athena **athena)
     athenaPIT_Release(&((*athena)->athenaPIT));
     athenaFIB_Release(&((*athena)->athenaFIB));
     parcLog_Release(&((*athena)->log));
+    if ((*athena)->configurationLog) {
+        parcOutputStream_Release(&((*athena)->configurationLog));
+    }
 }
 
 parcObject_ExtendPARCObject(Athena, _athenaDestroy, NULL, NULL, NULL, NULL, NULL, NULL);

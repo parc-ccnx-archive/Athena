@@ -67,6 +67,7 @@ typedef struct Athena {
     AthenaFIB *athenaFIB;
     AthenaContentStore *athenaContentStore;
     PARCLog *log;
+    PARCOutputStream *configurationLog;
 
     struct {
         uint64_t numProcessedInterests;
@@ -83,7 +84,7 @@ typedef struct Athena {
 #define AthenaModule_ContentStore         "ContentStore"
 #define AthenaModule_TransportLinkAdapter "TransportLinkAdapter"
 
-#define CCNxNameAthena_Forwarder    "lci:/local/forwarder"
+#define CCNxNameAthena_Forwarder    "ccnx:/local/forwarder"
 #define CCNxNameAthena_Control      CCNxNameAthena_Forwarder "/" AthenaModule_Control
 #define CCNxNameAthena_FIB          CCNxNameAthena_Forwarder "/" AthenaModule_FIB
 #define CCNxNameAthena_PIT          CCNxNameAthena_Forwarder "/" AthenaModule_PIT

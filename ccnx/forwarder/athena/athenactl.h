@@ -108,4 +108,20 @@ void athenactl_Usage(void);
  * @endcode
  */
 void athenactl_EncodeMessage(CCNxMetaMessage *message);
+
+/**
+ * @abstract send a constructed interest control message
+ * @discussion
+ *
+ * @param [in] identity
+ * @param [in] message
+ * @return result message from forwarder
+ *
+ * Example:
+ * @code
+ * {
+ * }
+ * @endcode
+ */
+const char *athenactl_SendInterestControl(PARCIdentity *identity, CCNxMetaMessage *message);
 #endif // libathenactl_h

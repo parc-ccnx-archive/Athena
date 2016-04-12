@@ -63,6 +63,7 @@ set(LIBATHENA_ETH_SOURCE_FILES
     athena_EthernetFragmenter.c 
     ${ATHENA_PLATFORM_MODULES}
     athena_TransportLinkModuleETH.c
+    ${ATHENA_PLATFORM_MODULES}
     )
 
 set(LIBATHENA_ETHFRAGMENT_BEFS_SOURCE_FILES
