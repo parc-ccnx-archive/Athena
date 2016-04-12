@@ -203,14 +203,19 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
 
     // If we we're setup to fragment, and the message would exceed our MTU size,
     // fragment it and send the messages out.
-    if ((ccnxCodecNetworkBufferIoVec_Length(iovec) + sizeof(struct ether_header)) > linkData->link.mtu) {
+    size_t messageLength = ccnxCodecNetworkBufferIoVec_Length(iovec);
+    if ((messageLength + sizeof(struct ether_header)) > linkData->link.mtu) {
         ccnxCodecNetworkBufferIoVec_Release(&iovec);
         if (linkData->fragmenter) {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "sending message (size=%d)", messageLength);
             return athenaEthernetFragmenter_Send(linkData->fragmenter,
                                                  linkData->athenaEthernet,
                                                  linkData->link.mtu, &header,
                                                  ccnxMetaMessage);
         } else {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "message larger than mtu and no fragmention support (size=%d)", messageLength);
             errno = EMSGSIZE;
             return -1;
         }
@@ -219,7 +224,6 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     // An iovec to contain the header and packet data for the trivial case
     struct iovec iov[2];
     struct iovec *array = iov;
-    size_t messageLength = 0;
 
     // If the iovec we're prepending to has more than one element, allocatedIovec holds the
     // allocated IO vector of the right size that we must deallocate before returning.
@@ -496,6 +500,9 @@ _ETHReceiveMessage(AthenaTransportLink *athenaTransportLink, struct ether_addr *
         } else if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
             parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
                           "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
+        } else {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "received message (size=%d)",
+                          parcBuffer_Remaining(wireFormatBuffer));
         }
         parcBuffer_Release(&wireFormatBuffer);
     }
