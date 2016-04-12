@@ -419,7 +419,7 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
 
         // Use the same fragmentation as our parent
         if (linkData->fragmenter) {
-            newLinkData->fragmenter = athenaEthernetFragmenter_Acquire(linkData->fragmenter);
+            newLinkData->fragmenter = athenaEthernetFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
         }
 
         // We use our parents fd to send, and receive demux'd messages from our parent on our queue
@@ -486,6 +486,8 @@ _ETHReceiveMessage(AthenaTransportLink *athenaTransportLink, struct ether_addr *
     PARCBuffer *wireFormatBuffer = parcBuffer_Slice(message);
     parcBuffer_Release(&message);
 
+    // If it's not a fragment returns our passed in wireFormatBuffer, otherwise it owns the buffer and eventually
+    // passes back the aggregated message after receiving all its fragments, returning NULL in the mean time.
     wireFormatBuffer = athenaEthernetFragmenter_Receive(linkData->fragmenter, wireFormatBuffer);
 
     if (wireFormatBuffer != NULL) {

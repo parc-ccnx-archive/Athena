@@ -122,6 +122,7 @@ _destroy(AthenaEthernetFragmenter **athenaEthernetFragmenter)
     if ((*athenaEthernetFragmenter)->module) {
         dlclose((*athenaEthernetFragmenter)->module);
     }
+    parcMemory_Deallocate(&((*athenaEthernetFragmenter)->moduleName));
     athenaTransportLink_Release(&((*athenaEthernetFragmenter)->athenaTransportLink));
 }
 
@@ -132,6 +133,7 @@ athenaEthernetFragmenter_Create(AthenaTransportLink *athenaTransportLink, const 
 {
     AthenaEthernetFragmenter *athenaEthernetFragmenter = parcObject_CreateAndClearInstance(AthenaEthernetFragmenter);
     assertNotNull(athenaEthernetFragmenter, "Could not create a new fragmenter instance.");
+    athenaEthernetFragmenter->moduleName = parcMemory_StringDuplicate(fragmenterName, strlen(fragmenterName));
 
     athenaEthernetFragmenter->athenaTransportLink = athenaTransportLink_Acquire(athenaTransportLink);
     const char *moduleLibrary = _nameToLibrary(fragmenterName);

@@ -72,6 +72,7 @@ typedef void (AthenaEthernetFragmenter_Fini)(AthenaEthernetFragmenter *athenaEth
 //
 struct AthenaEthernetFragmenter {
     AthenaTransportLink *athenaTransportLink; // link associated with fragmenter
+    const char *moduleName;
     void *module; // so library can be unloaded
     AthenaEthernetFragmenter_Send *send;
     AthenaEthernetFragmenter_Receive *receive;
