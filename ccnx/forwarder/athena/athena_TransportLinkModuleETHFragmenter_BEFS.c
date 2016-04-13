@@ -55,6 +55,7 @@ typedef struct _BEFS_fragmenterData {
     uint32_t sendSequenceNumber;
     uint32_t receiveSequenceNumber;
     PARCDeque *fragments;
+    size_t reassembledSize;
     bool idle;
 } _BEFS_fragmenterData;
 
@@ -82,6 +83,7 @@ _ETH_BEFS_ClearFragmenterData(AthenaEthernetFragmenter *athenaEthernetFragmenter
         parcBuffer_Release(&wireFormatBuffer);
     }
     fragmenterData->idle = true;
+    fragmenterData->reassembledSize = 0;
 }
 
 void
@@ -174,15 +176,15 @@ _ETH_BEFS_ReceiveAndReassemble(AthenaEthernetFragmenter *athenaEthernetFragmente
 
     // Gather buffers until we receive an end frame
     parcDeque_Append(fragmenterData->fragments, wireFormatBuffer);
+    fragmenterData->reassembledSize += parcBuffer_Remaining(wireFormatBuffer);
     fragmenterData->receiveSequenceNumber = seqnum + 1; // next to expect
 
     if (_hopByHopHeader_GetEFlag(header)) {
-        PARCBuffer *reassembledBuffer = parcBuffer_Allocate(0);
+        PARCBuffer *reassembledBuffer = parcBuffer_Allocate(fragmenterData->reassembledSize);
         while (parcDeque_Size(fragmenterData->fragments) > 0) {
             wireFormatBuffer = parcDeque_RemoveFirst(fragmenterData->fragments);
             const uint8_t *array = parcBuffer_Overlay(wireFormatBuffer, 0);
             size_t arrayLength = parcBuffer_Remaining(wireFormatBuffer);
-            parcBuffer_Resize(reassembledBuffer, parcBuffer_Capacity(reassembledBuffer) + arrayLength);
             parcBuffer_PutArray(reassembledBuffer, arrayLength, array);
             parcBuffer_Release(&wireFormatBuffer);
         }
