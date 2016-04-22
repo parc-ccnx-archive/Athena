@@ -28,8 +28,8 @@
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
  * @copyright 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#ifndef libathena_EthernetFragmenter_BEFS_h
-#define libathena_EthernetFragmenter_BEFS_h
+#ifndef libathena_Fragmenter_BEFS_h
+#define libathena_Fragmenter_BEFS_h
 
 /*
  * Fragmenter module supporting point to point fragmentation that is documented in:
@@ -91,5 +91,5 @@ typedef struct hopbyhop_header {
  */
 #define _hopByHopHeader_GetIFlag(header) ((header)->blob[0] & IMASK)
 
-AthenaEthernetFragmenter *athenaEthernetFragmenter_BEFS_Init(AthenaEthernetFragmenter *athenaEthernetFragmenter);
-#endif // libathena_EthernetFragmenter_BEFS_h
+AthenaFragmenter *athenaFragmenter_BEFS_Init(AthenaFragmenter *athenaFragmenter);
+#endif // libathena_Fragmenter_BEFS_h

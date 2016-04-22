@@ -53,7 +53,7 @@
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModuleETH.h>
 #include <ccnx/forwarder/athena/athena_Ethernet.h>
-#include <ccnx/forwarder/athena/athena_EthernetFragmenter.h>
+#include <ccnx/forwarder/athena/athena_Fragmenter.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 
@@ -84,7 +84,7 @@ typedef struct _ETHLinkData {
         size_t send_ShortWrite;
     } _stats;
     AthenaEthernet *athenaEthernet;
-    AthenaEthernetFragmenter *fragmenter;
+    AthenaFragmenter *fragmenter;
 } _ETHLinkData;
 
 static int
@@ -139,7 +139,7 @@ _ETHLinkData_Destroy(_ETHLinkData **linkData)
         parcHashCodeTable_Destroy(&((*linkData)->multiplexTable));
     }
     if ((*linkData)->fragmenter) {
-        athenaEthernetFragmenter_Release(&((*linkData)->fragmenter));
+        athenaFragmenter_Release(&((*linkData)->fragmenter));
     }
     parcMemory_Deallocate(linkData);
 }
@@ -182,97 +182,30 @@ _createNameFromLinkData(const _connectionPair *linkData, bool listener)
 }
 
 static int
-_ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+_sendIoVector(AthenaTransportLink *athenaTransportLink, struct ether_header *header, const struct iovec *iovec, size_t iovcnt)
 {
     struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
 
-    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
-                      "sending deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
-    }
+    // A new iovec to contain the header and packet data
+    struct iovec iov[iovcnt + 1];
 
-    // Construct the ethernet header to prepend
-    struct ether_header header;
-    memcpy(header.ether_shost, &(linkData->link.myAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
-    memcpy(header.ether_dhost, &(linkData->link.peerAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
-    header.ether_type = htons(athenaEthernet_GetEtherType(linkData->athenaEthernet));
-
-    CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
-
-    // If we we're setup to fragment, and the message would exceed our MTU size,
-    // fragment it and send the messages out.
-    size_t messageLength = ccnxCodecNetworkBufferIoVec_Length(iovec);
-    if ((messageLength + sizeof(struct ether_header)) > linkData->link.mtu) {
-        ccnxCodecNetworkBufferIoVec_Release(&iovec);
-        if (linkData->fragmenter) {
-            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
-                          "sending message (size=%d)", messageLength);
-            return athenaEthernetFragmenter_Send(linkData->fragmenter,
-                                                 linkData->athenaEthernet,
-                                                 linkData->link.mtu, &header,
-                                                 ccnxMetaMessage);
-        } else {
-            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
-                          "message larger than mtu and no fragmention support (size=%d)", messageLength);
-            errno = EMSGSIZE;
-            return -1;
-        }
-    }
-
-    // An iovec to contain the header and packet data for the trivial case
-    struct iovec iov[2];
-    struct iovec *array = iov;
-
-    // If the iovec we're prepending to has more than one element, allocatedIovec holds the
-    // allocated IO vector of the right size that we must deallocate before returning.
-    struct iovec *allocatedIovec = NULL;
-
-    // Attach our ethernet header and populate the iovec
-
-    int iovcnt = ccnxCodecNetworkBufferIoVec_GetCount((CCNxCodecNetworkBufferIoVec *) iovec);
-    const struct iovec *networkBufferIovec = ccnxCodecNetworkBufferIoVec_GetArray((CCNxCodecNetworkBufferIoVec *) iovec);
-
-    // Trivial case, single iovec element.
-    if (iovcnt == 1) {
-        // Header
-        array[0].iov_len = sizeof(struct ether_header);
-        array[0].iov_base = &header;
-
-        // Message content
-        array[1].iov_len = networkBufferIovec->iov_len;
-        array[1].iov_base = networkBufferIovec->iov_base;
-        messageLength = array[0].iov_len + array[1].iov_len;
-    } else {
-        // Allocate a new iovec if more than one vector
-        allocatedIovec = parcMemory_Allocate(sizeof(struct iovec) * (iovcnt + 1));
-        array = allocatedIovec;
-
-        // Header
-        array[0].iov_len = sizeof(struct ether_header);
-        array[0].iov_base = &header;
-        messageLength = array[0].iov_len;
-
-        // Append message content
-        for (int i = 0; i < iovcnt; i++) {
-            array[i + 1].iov_len = networkBufferIovec[i].iov_len;
-            array[i + 1].iov_base = networkBufferIovec[i].iov_base;
-            messageLength += array[i + 1].iov_len;
-        }
-    }
+    // Prepend the header
+    iov[0].iov_len = sizeof(struct ether_header);
+    iov[0].iov_base = &header;
     iovcnt++; // increment for the header
 
+    // Append message content
+    size_t messageLength = 0;
+    for (int i = 0; i < iovcnt; i++) {
+        iov[i + 1].iov_len = iovec[i].iov_len;
+        iov[i + 1].iov_base = iovec[i].iov_base;
+        messageLength += iov[i + 1].iov_len;
+    }
     parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
                   "sending message (size=%d)", messageLength);
 
     ssize_t writeCount = 0;
-    writeCount = athenaEthernet_Send(linkData->athenaEthernet, array, iovcnt);
-    ccnxCodecNetworkBufferIoVec_Release(&iovec);
-
-    // Free up any storage allocated for a non-singular iovec
-    if (allocatedIovec != NULL) {
-        parcMemory_Deallocate(&allocatedIovec);
-        array = NULL;
-    }
+    writeCount = athenaEthernet_Send(linkData->athenaEthernet, iov, iovcnt);
 
     // on error close the link, else return to retry a zero write
     if (writeCount == -1) {
@@ -293,10 +226,87 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     if (writeCount != messageLength) {
         linkData->_stats.send_ShortWrite++;
         parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
+        errno = EIO;
         return -1;
     }
 
     return 0;
+}
+
+static int
+_ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+{
+    struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
+    // Construct the ethernet header to prepend
+    struct ether_header header;
+    memcpy(header.ether_shost, &(linkData->link.myAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
+    memcpy(header.ether_dhost, &(linkData->link.peerAddress), ETHER_ADDR_LEN * sizeof(uint8_t));
+    header.ether_type = htons(athenaEthernet_GetEtherType(linkData->athenaEthernet));
+
+    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                      "sending deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
+    }
+
+    CCNxCodecNetworkBufferIoVec *messageIoVector = athenaTransportLinkModule_GetMessageIoVector(ccnxMetaMessage);
+    size_t messageLength = ccnxCodecNetworkBufferIoVec_Length(messageIoVector);
+    PARCBuffer *message = NULL;
+
+    int fragmentNumber = 0;
+    CCNxCodecEncodingBufferIOVec *ioFragment = NULL;
+    const struct iovec *iovec = NULL;
+    size_t iovcnt = 0;
+
+    // Get initial IO vector message or message fragment if we need, and have, fragmentation support.
+    if (messageLength <= linkData->link.mtu) {
+        iovec = ccnxCodecNetworkBufferIoVec_GetArray(messageIoVector);
+        iovcnt = ccnxCodecNetworkBufferIoVec_GetCount(messageIoVector);
+    } else {
+        if (linkData->fragmenter == NULL) {
+            // Right now we work with the message in a contiguous buffer, we could optimize the copy out by working directly with the IO Vector.
+            message = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+            ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, message,
+                                                              linkData->link.mtu, fragmentNumber);
+            if (ioFragment) {
+                iovec = ioFragment->iov;
+                iovcnt = ioFragment->iovcnt;
+                fragmentNumber++;
+            }
+        } else { // message too big and no fragmenter provided
+            ccnxCodecNetworkBufferIoVec_Release(&messageIoVector);
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "message larger than mtu and no fragmention support (size=%d)", messageLength);
+            errno = EMSGSIZE;
+            return -1;
+        }
+    }
+
+    int sendResult = 0;
+    while (iovec) {
+        sendResult = _sendIoVector(athenaTransportLink, &header, iovec, iovcnt);
+        iovec = NULL;
+        if (ioFragment) {
+            ccnxCodecEncodingBufferIOVec_Release(&ioFragment);
+        }
+        if (sendResult == -1) {
+            break;
+        }
+        if (messageLength > linkData->link.mtu) {
+            ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, message,
+                                                              linkData->link.mtu, fragmentNumber);
+            if (ioFragment) {
+                iovec = ioFragment->iov;
+                iovcnt = ioFragment->iovcnt;
+                fragmentNumber++;
+            }
+        }
+    }
+
+    ccnxCodecNetworkBufferIoVec_Release(&messageIoVector);
+    parcBuffer_Release(&message);
+
+    return sendResult;
 }
 
 static void
@@ -419,7 +429,7 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
 
         // Use the same fragmentation as our parent
         if (linkData->fragmenter) {
-            newLinkData->fragmenter = athenaEthernetFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
+            newLinkData->fragmenter = athenaFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
         }
 
         // We use our parents fd to send, and receive demux'd messages from our parent on our queue
@@ -488,7 +498,7 @@ _ETHReceiveMessage(AthenaTransportLink *athenaTransportLink, struct ether_addr *
 
     // If it's not a fragment returns our passed in wireFormatBuffer, otherwise it owns the buffer and eventually
     // passes back the aggregated message after receiving all its fragments, returning NULL in the mean time.
-    wireFormatBuffer = athenaEthernetFragmenter_Receive(linkData->fragmenter, wireFormatBuffer);
+    wireFormatBuffer = athenaFragmenter_ReceiveFragment(linkData->fragmenter, wireFormatBuffer);
 
     if (wireFormatBuffer != NULL) {
         // Construct, and return a ccnxMetaMessage from the wire format buffer.
@@ -932,7 +942,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
     if (result && fragmenterName) {
         struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(result);
-        linkData->fragmenter = athenaEthernetFragmenter_Create(result, fragmenterName);
+        linkData->fragmenter = athenaFragmenter_Create(result, fragmenterName);
         if (linkData->fragmenter == NULL) {
             parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                           "Failed to open/initialize %s fragmenter for %s", fragmenterName, linkName);

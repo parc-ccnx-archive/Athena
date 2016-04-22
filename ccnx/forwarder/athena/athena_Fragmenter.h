@@ -28,55 +28,55 @@
  * @author Kevin Fox, Palo Alto Research Center (Xerox PARC)
  * @copyright 2016, Xerox Corporation (Xerox)and Palo Alto Research Center (PARC).  All rights reserved.
  */
-#ifndef libathena_EthernetFragmenter
-#define libathena_EthernetFragmenter
+#ifndef libathena_Fragmenter
+#define libathena_Fragmenter
 
 #include <parc/algol/parc_Deque.h>
-#include <ccnx/forwarder/athena/athena_Ethernet.h>
+#include <ccnx/common/codec/ccnxCodec_EncodingBuffer.h>
 
 /**
- * @typedef AthenaEthernetFragmenter
- * @brief Ethernet fragmenter instance private data
+ * @typedef AthenaFragmenter
+ * @brief Fragmenter instance private data
  */
-typedef struct AthenaEthernetFragmenter AthenaEthernetFragmenter;
+typedef struct AthenaFragmenter AthenaFragmenter;
 
 /**
- * @typedef AthenaEthernetFragmenter_Send
- * @brief Ethernet fragmenter send method
+ * @typedef AthenaFragmenter_CreateFragment
+ * @brief Fragmenter create fragment method
  */
-typedef int (AthenaEthernetFragmenter_Send)(AthenaEthernetFragmenter *athenaEthernetFragmenter,
-                                            AthenaEthernet *athenaEthernet,
-                                            size_t mtu, struct ether_header *etherHeader,
-                                            CCNxMetaMessage *ccnxMetaMessage);
+typedef CCNxCodecEncodingBufferIOVec *(AthenaFragmenter_CreateFragment)(AthenaFragmenter *athenaFragmenter,
+                                                                        PARCBuffer *message,
+                                                                        size_t mtu, int fragmentNumber);
+
 /**
- * @typedef AthenaEthernetFragmenter_Receive
- * @brief Ethernet fragmenter receive method
+ * @typedef AthenaFragmenter_ReceiveFragment
+ * @brief Fragmenter receive method
  */
-typedef PARCBuffer *(AthenaEthernetFragmenter_Receive)(AthenaEthernetFragmenter *athenaEthernetFragmenter,
+typedef PARCBuffer *(AthenaFragmenter_ReceiveFragment)(AthenaFragmenter *athenaFragmenter,
                                                        PARCBuffer *wireFormatBuffer);
 
 /**
- * @typedef AthenaEthernetFragmenter_Init
- * @brief Ethernet fragmenter initialization method
+ * @typedef AthenaFragmenter_Init
+ * @brief Fragmenter initialization method
  */
-typedef AthenaEthernetFragmenter *(AthenaEthernetFragmenter_Init)(AthenaEthernetFragmenter *athenaEthernetFragmenter);
+typedef AthenaFragmenter *(AthenaFragmenter_Init)(AthenaFragmenter *athenaFragmenter);
 
 /**
- * @typedef AthenaEthernetFragmenter_Init
- * @brief Ethernet fragmenter initialization method
+ * @typedef AthenaFragmenter_Init
+ * @brief Fragmenter initialization method
  */
-typedef void (AthenaEthernetFragmenter_Fini)(AthenaEthernetFragmenter *athenaEthernetFragmenter);
+typedef void (AthenaFragmenter_Fini)(AthenaFragmenter *athenaFragmenter);
 
 //
 // Private data for each fragmented connection
 //
-struct AthenaEthernetFragmenter {
+struct AthenaFragmenter {
     AthenaTransportLink *athenaTransportLink; // link associated with fragmenter
     const char *moduleName;
     void *module; // so library can be unloaded
-    AthenaEthernetFragmenter_Send *send;
-    AthenaEthernetFragmenter_Receive *receive;
-    AthenaEthernetFragmenter_Fini *fini;
+    AthenaFragmenter_CreateFragment *createFragment;
+    AthenaFragmenter_ReceiveFragment *receiveFragment;
+    AthenaFragmenter_Fini *fini;
     void *fragmenterData;
 };
 
@@ -92,73 +92,75 @@ struct AthenaEthernetFragmenter {
  * @code
  * void
  * {
- *     AthenaEthernetFragmenter *athenaEthernetFragmenter = athenaEthernetFragmenter_Create(athenaTransportLink, "BEFS");
+ *     AthenaFragmenter *athenaFragmenter = athenaFragmenter_Create(athenaTransportLink, "BEFS");
  * }
  * @endcode
  */
-AthenaEthernetFragmenter *athenaEthernetFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fragmenterName);
+AthenaFragmenter *athenaFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fragmenterName);
 
 /**
  * @abstract obtain a new reference to a fragmenter instance
  * @discussion
  *
- * @param [in] athenaEthernetFragmenter instance to acquire a reference to
+ * @param [in] athenaFragmenter instance to acquire a reference to
  * @return pointer to new reference
  *
  * Example:
  * @code
  * void
  * {
- *     AthenaEthernetFragmenter *newReference = athenaEthernetFragmenter_Acquire(athenaEthernetFragmenter);
+ *     AthenaFragmenter *newReference = athenaFragmenter_Acquire(athenaFragmenter);
  * }
  * @endcode
  */
-AthenaEthernetFragmenter *athenaEthernetFragmenter_Acquire(const AthenaEthernetFragmenter *athenaEthernetFragmenter);
+AthenaFragmenter *athenaFragmenter_Acquire(const AthenaFragmenter *athenaFragmenter);
 
 /**
  * @abstract release a fragmenter reference
  * @discussion
  *
- * @param [in] athenaEthernetFragmenter instance to release
+ * @param [in] athenaFragmenter instance to release
  *
  * Example:
  * @code
  * void
  * {
- *     athenaEthernetFragmenter_Release(&athenaEthernetFragmenter);
+ *     athenaFragmenter_Release(&athenaFragmenter);
  * }
  * @endcode
  */
-void athenaEthernetFragmenter_Release(AthenaEthernetFragmenter **);
+void athenaFragmenter_Release(AthenaFragmenter **);
 
 /**
  * @abstract send a message fragmenting it by the provided mtu size
  * @discussion
  *
- * @param [in] athenaEthernetFragmenter
- * @param [in] athenaEthernet
- * @param [in] mtu
- * @param [in] header
+ * @param [in] athenaFragmenter
  * @param [in] ccnxMetaMessage
+ * @param [in] mtu
+ * @param [in] fragmentNumber
  * @return 0 on success, -1 on failure with errno set to indicate failure
  *
  * Example:
  * @code
  * void
  * {
- *     int result = athenaEthernetFragmenter_Send(athenaEthernetFragmenter, athenaEthernet, mtu, header, ccnxMetaMessage);
+ *     // Get the first fragment from a message
+ *     CCNxCodecEncodingBufferIOVec *ioVectorBuffer = athenaFragmenter_CreateFragment(athenaFragmenter, ccnxMetaMessage, 1200, 0);
+ *     const struct iovec *iov = ioVectorBuffer->iov;
+ *     size_t iovcnt = ioVectorBuffer->iovcnt;
  * }
  * @endcode
  */
-int athenaEthernetFragmenter_Send(AthenaEthernetFragmenter *athenaEthernetFragmenter,
-                                  AthenaEthernet *athenaEthernet, size_t mtu,
-                                  struct ether_header *header, CCNxMetaMessage *ccnxMetaMessage);
+CCNxCodecEncodingBufferIOVec *athenaFragmenter_CreateFragment(AthenaFragmenter *athenaFragmenter,
+                                                              PARCBuffer *message,
+                                                              size_t mtu, int fragmentNumber);
 
 /**
  * @abstract construct a message from received fragments
  * @discussion
  *
- * @param [in] athenaEthernetFragmenter
+ * @param [in] athenaFragmenter
  * @param [in] wireFormatBuffer
  * @return pointer to reassembled message,
  *         NULL if waiting for more fragments,
@@ -168,11 +170,11 @@ int athenaEthernetFragmenter_Send(AthenaEthernetFragmenter *athenaEthernetFragme
  * @code
  * void
  * {
- *     PARCBuffer *wireFormatBuffer = athenaEthernetFragmenter_Receive(athenaEthernetFragmenter, inputWireFormatBuffer);
+ *     PARCBuffer *wireFormatBuffer = athenaFragmenter_ReceiveFragment(athenaFragmenter, inputWireFormatBuffer);
  * }
  * @endcode
  */
-PARCBuffer *athenaEthernetFragmenter_Receive(AthenaEthernetFragmenter *athenaEthernetFragmenter,
+PARCBuffer *athenaFragmenter_ReceiveFragment(AthenaFragmenter *athenaFragmenter,
                                              PARCBuffer *wireFormatBuffer);
 
-#endif // libathena_EthernetFragmenter
+#endif // libathena_Fragmenter

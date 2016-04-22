@@ -30,9 +30,9 @@
  */
 
 /*
- * Provide support for loadable ethernet fragmentation modules.  The fragmenter library must be named
+ * Provide support for loadable fragmentation modules.  The fragmenter library must be named
  * libathena_ETHFragmenter_<name>, and must contain an initialization routine that is named
- * athenaEthernetFrabmenter_<name>_Init.  The init routine is provided an AthenaEthernetFragmenter
+ * athenaFragmenter_<name>_Init.  The init routine is provided an AthenaFragmenter
  * object instance that is used to maintain private instance state for the fragmentation module.
  */
 #include <config.h>
@@ -41,11 +41,10 @@
 
 #include <dlfcn.h>
 #include <errno.h>
-#include <net/ethernet.h>
 
 #include <parc/algol/parc_Object.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
-#include <ccnx/forwarder/athena/athena_EthernetFragmenter.h>
+#include <ccnx/forwarder/athena/athena_Fragmenter.h>
 
 #include <ctype.h>
 
@@ -59,14 +58,14 @@ _strtoupper(const char *string)
     return upperCaseString;
 }
 
-#define LIBRARY_MODULE_PREFIX "libathena_ETHFragmenter_"
+#define LIBRARY_MODULE_PREFIX "libathena_Fragmenter_"
 #ifdef __linux__
 #define LIBRARY_MODULE_SUFFIX ".so"
 #else // MacOS
 #define LIBRARY_MODULE_SUFFIX ".dylib"
 #endif
 
-#define METHOD_PREFIX "athenaEthernetFragmenter_"
+#define METHOD_PREFIX "athenaFragmenter_"
 #define INIT_METHOD_SUFFIX "_Init"
 
 static const char *
@@ -114,82 +113,89 @@ _nameToLibrary(const char *name)
 }
 
 static void
-_destroy(AthenaEthernetFragmenter **athenaEthernetFragmenter)
+_destroy(AthenaFragmenter **athenaFragmenter)
 {
-    if ((*athenaEthernetFragmenter)->fini) {
-        (*athenaEthernetFragmenter)->fini(*athenaEthernetFragmenter);
+    if ((*athenaFragmenter)->fini) {
+        (*athenaFragmenter)->fini(*athenaFragmenter);
     }
-    if ((*athenaEthernetFragmenter)->module) {
-        dlclose((*athenaEthernetFragmenter)->module);
+    if ((*athenaFragmenter)->module) {
+        dlclose((*athenaFragmenter)->module);
     }
-    parcMemory_Deallocate(&((*athenaEthernetFragmenter)->moduleName));
-    athenaTransportLink_Release(&((*athenaEthernetFragmenter)->athenaTransportLink));
+    parcMemory_Deallocate(&((*athenaFragmenter)->moduleName));
+    athenaTransportLink_Release(&((*athenaFragmenter)->athenaTransportLink));
 }
 
-parcObject_ExtendPARCObject(AthenaEthernetFragmenter, _destroy, NULL, NULL, NULL, NULL, NULL, NULL);
+parcObject_ExtendPARCObject(AthenaFragmenter, _destroy, NULL, NULL, NULL, NULL, NULL, NULL);
 
-AthenaEthernetFragmenter *
-athenaEthernetFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fragmenterName)
+AthenaFragmenter *
+athenaFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fragmenterName)
 {
-    AthenaEthernetFragmenter *athenaEthernetFragmenter = parcObject_CreateAndClearInstance(AthenaEthernetFragmenter);
-    assertNotNull(athenaEthernetFragmenter, "Could not create a new fragmenter instance.");
-    athenaEthernetFragmenter->moduleName = parcMemory_StringDuplicate(fragmenterName, strlen(fragmenterName));
+    AthenaFragmenter *athenaFragmenter = parcObject_CreateAndClearInstance(AthenaFragmenter);
+    assertNotNull(athenaFragmenter, "Could not create a new fragmenter instance.");
+    athenaFragmenter->moduleName = parcMemory_StringDuplicate(fragmenterName, strlen(fragmenterName));
 
-    athenaEthernetFragmenter->athenaTransportLink = athenaTransportLink_Acquire(athenaTransportLink);
+    athenaFragmenter->athenaTransportLink = athenaTransportLink_Acquire(athenaTransportLink);
     const char *moduleLibrary = _nameToLibrary(fragmenterName);
-    athenaEthernetFragmenter->module = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
+    athenaFragmenter->module = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
     parcMemory_Deallocate(&moduleLibrary);
 
-    if (athenaEthernetFragmenter->module == NULL) {
-        athenaEthernetFragmenter_Release(&athenaEthernetFragmenter);
+    if (athenaFragmenter->module == NULL) {
+        athenaFragmenter_Release(&athenaFragmenter);
         errno = ENOENT;
         return NULL;
     }
 
     const char *initEntry = _nameToInitMethod(fragmenterName);
-    AthenaEthernetFragmenter_Init *_init = dlsym(athenaEthernetFragmenter->module, initEntry);
+    AthenaFragmenter_Init *_init = dlsym(athenaFragmenter->module, initEntry);
     parcMemory_Deallocate(&initEntry);
 
     if (_init == NULL) {
-        athenaEthernetFragmenter_Release(&athenaEthernetFragmenter);
+        athenaFragmenter_Release(&athenaFragmenter);
         errno = EFAULT;
         return NULL;
     }
 
-    if (_init(athenaEthernetFragmenter) == NULL) {
-        athenaEthernetFragmenter_Release(&athenaEthernetFragmenter);
+    if (_init(athenaFragmenter) == NULL) {
+        athenaFragmenter_Release(&athenaFragmenter);
         errno = ENODEV;
         return NULL;
     }
 
-    return athenaEthernetFragmenter;
+    return athenaFragmenter;
 }
 
-parcObject_ImplementAcquire(athenaEthernetFragmenter, AthenaEthernetFragmenter);
+parcObject_ImplementAcquire(athenaFragmenter, AthenaFragmenter);
 
-parcObject_ImplementRelease(athenaEthernetFragmenter, AthenaEthernetFragmenter);
-
-int
-athenaEthernetFragmenter_Send(AthenaEthernetFragmenter *athenaEthernetFragmenter,
-                              AthenaEthernet *athenaEthernet,
-                              size_t mtu,
-                              struct ether_header *header,
-                              CCNxMetaMessage *ccnxMetaMessage)
-{
-    if (athenaEthernetFragmenter && athenaEthernetFragmenter->send) {
-        return athenaEthernetFragmenter->send(athenaEthernetFragmenter, athenaEthernet, mtu, header, ccnxMetaMessage);
-    } else {
-        errno = ENOENT;
-        return -1;
-    }
-    return 0;
-}
+parcObject_ImplementRelease(athenaFragmenter, AthenaFragmenter);
 
 PARCBuffer *
-athenaEthernetFragmenter_Receive(AthenaEthernetFragmenter *athenaEthernetFragmenter, PARCBuffer *wireFormatBuffer)
+athenaFragmenter_ReceiveFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireFormatBuffer)
 {
-    if (athenaEthernetFragmenter && athenaEthernetFragmenter->receive) {
-        return athenaEthernetFragmenter->receive(athenaEthernetFragmenter, wireFormatBuffer);
+    if (athenaFragmenter && athenaFragmenter->receiveFragment) {
+        return athenaFragmenter->receiveFragment(athenaFragmenter, wireFormatBuffer);
     }
     return wireFormatBuffer;
+}
+
+    // CCNxCodecEncodingBuffer *encodingBuffer = ccnxCodecEncodingBuffer_Create();
+    // ccnxCodecEncodingBuffer_AppendBuffer(encodingBuffer, PARCBuffer *bufferToAppend);
+    // NEW ccnxCodecEncodingBuffer_PrependBuffer(encodingBuffer, PARCBuffer *bufferToPrepend);
+    // NEW CCNxCodecEncodingBuffer *iov = ccnxCodecEncodingBuffer_Slice(encodingBuffer, offset, length);
+    // Optional ccnxCodecEncodingBuffer_AppendIOVec(encodingBuffer, struct iovec *vectorToAppend);
+    // Optional ccnxCodecEncodingBuffer_PrependIOVec(encodingBuffer, struct iovec *vectorToPrepend);
+    // CCNxCodecEncodingBufferIOVec *iov = ccnxCodecEncodingBuffer_CreateIOVec(encodingBuffer);
+    // void ccnxCodecEncodingBufferIOVec_Release(CCNxCodecEncodingBufferIOVec **iovecPtr);
+    // writev(STDOUT_FILENO, iov->iov, iov->iovcnt);
+    // ccnxCodecEncodingBufferIOVec_Release(&iov);
+
+CCNxCodecEncodingBufferIOVec *
+athenaFragmenter_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, size_t mtu, int fragmentNumber)
+{
+    if (athenaFragmenter && athenaFragmenter->createFragment) {
+        return athenaFragmenter->createFragment(athenaFragmenter, message, mtu, fragmentNumber);
+    } else {
+        errno = ENOENT;
+        return NULL;
+    }
+    return 0;
 }
