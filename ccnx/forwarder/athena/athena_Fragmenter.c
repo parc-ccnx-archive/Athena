@@ -177,17 +177,6 @@ athenaFragmenter_ReceiveFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer 
     return wireFormatBuffer;
 }
 
-    // CCNxCodecEncodingBuffer *encodingBuffer = ccnxCodecEncodingBuffer_Create();
-    // ccnxCodecEncodingBuffer_AppendBuffer(encodingBuffer, PARCBuffer *bufferToAppend);
-    // NEW ccnxCodecEncodingBuffer_PrependBuffer(encodingBuffer, PARCBuffer *bufferToPrepend);
-    // NEW CCNxCodecEncodingBuffer *iov = ccnxCodecEncodingBuffer_Slice(encodingBuffer, offset, length);
-    // Optional ccnxCodecEncodingBuffer_AppendIOVec(encodingBuffer, struct iovec *vectorToAppend);
-    // Optional ccnxCodecEncodingBuffer_PrependIOVec(encodingBuffer, struct iovec *vectorToPrepend);
-    // CCNxCodecEncodingBufferIOVec *iov = ccnxCodecEncodingBuffer_CreateIOVec(encodingBuffer);
-    // void ccnxCodecEncodingBufferIOVec_Release(CCNxCodecEncodingBufferIOVec **iovecPtr);
-    // writev(STDOUT_FILENO, iov->iov, iov->iovcnt);
-    // ccnxCodecEncodingBufferIOVec_Release(&iov);
-
 CCNxCodecEncodingBufferIOVec *
 athenaFragmenter_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, size_t mtu, int fragmentNumber)
 {

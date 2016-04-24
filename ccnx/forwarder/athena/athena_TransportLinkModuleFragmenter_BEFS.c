@@ -204,49 +204,56 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
 static CCNxCodecEncodingBufferIOVec *
 _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, size_t mtu, int fragmentNumber)
 {
+    CCNxCodecEncodingBufferIOVec *fragmentIoVec = NULL;
     _BEFS_fragmenterData *fragmenterData = _BEFS_GetFragmenterData(athenaFragmenter);
 
-    _HopByHopHeader fragmentHeader = {0};
     const size_t maxPayload = mtu - sizeof(_HopByHopHeader);
     size_t payloadLength = maxPayload;
-    if (fragmentNumber == 0) {
-        _hopByHopHeader_SetBFlag(&fragmentHeader);
-    }
 
     size_t length = parcBuffer_Remaining(message);
     size_t offset = maxPayload * fragmentNumber;
-    size_t remaining = length - offset;
+    ssize_t remaining = length - offset;
 
     if (remaining <= 0) {
         return NULL;
     }
 
-    CCNxCodecEncodingBuffer *encodingBuffer = ccnxCodecEncodingBuffer_Create();
     // Create fragmentation header
-    ccnxCodecEncodingBuffer_AppendBuffer(encodingBuffer, message);
+    PARCBuffer *fragmentHeaderBuffer = parcBuffer_Allocate(sizeof(_HopByHopHeader));
+    _HopByHopHeader *fragmentHeader = parcBuffer_Overlay(fragmentHeaderBuffer, 0);
 
-    _hopByHopHeader_SetSequenceNumber(&fragmentHeader, fragmenterData->sendSequenceNumber++);
+    if (fragmentNumber == 0) {
+        _hopByHopHeader_SetBFlag(fragmentHeader);
+    }
+
+    _hopByHopHeader_SetSequenceNumber(fragmentHeader, fragmenterData->sendSequenceNumber++);
 
     if (remaining < maxPayload) {
         payloadLength = remaining;
-        _hopByHopHeader_SetEFlag(&fragmentHeader);
+        _hopByHopHeader_SetEFlag(fragmentHeader);
     }
 
-    _hopByHopHeader_SetPayloadLength(&fragmentHeader, payloadLength);
+    _hopByHopHeader_SetPayloadLength(fragmentHeader, payloadLength);
+
+    // Create slice of buffer to send
+    CCNxCodecEncodingBuffer *encodingBuffer = ccnxCodecEncodingBuffer_Create();
+    ccnxCodecEncodingBuffer_AppendBuffer(encodingBuffer, message);
 
     CCNxCodecEncodingBuffer *encodingBufferSlice = NULL;
-    // NEW encodingBufferSlice = ccnxCodecEncodingBuffer_Slice(encodingBuffer, offset, length);
+    // If NULL there's no fragment that matches the offset/length we asked for
+    encodingBufferSlice = ccnxCodecEncodingBuffer_Slice(encodingBuffer, offset, maxPayload);
     ccnxCodecEncodingBuffer_Release(&encodingBuffer);
 
     if (encodingBufferSlice) {
-        PARCBuffer *fragmentHeaderBuffer = parcBuffer_Wrap(&fragmentHeader, sizeof(_HopByHopHeader), 0, sizeof(_HopByHopHeader));
-        // NEW
-        ccnxCodecEncodingBuffer_PrependBuffer(encodingBufferSlice, PARCBuffer *fragmentHeaderBuffer);
-        parcBuffer_Release(&fragmentHeaderBuffer);
+        // Prepend our hop by hop header to the slice
+        ccnxCodecEncodingBuffer_PrependBuffer(encodingBufferSlice, fragmentHeaderBuffer);
 
-        return ccnxCodecEncodingBuffer_CreateIOVec(encodingBufferSlice);
+        fragmentIoVec = ccnxCodecEncodingBuffer_CreateIOVec(encodingBufferSlice);
+        ccnxCodecEncodingBuffer_Release(&encodingBufferSlice);
     }
-    return NULL;
+
+    parcBuffer_Release(&fragmentHeaderBuffer);
+    return fragmentIoVec;
 }
 
 

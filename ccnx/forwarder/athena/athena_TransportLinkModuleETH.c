@@ -191,16 +191,16 @@ _sendIoVector(AthenaTransportLink *athenaTransportLink, struct ether_header *hea
 
     // Prepend the header
     iov[0].iov_len = sizeof(struct ether_header);
-    iov[0].iov_base = &header;
-    iovcnt++; // increment for the header
+    iov[0].iov_base = header;
 
     // Append message content
-    size_t messageLength = 0;
+    size_t messageLength = sizeof(struct ether_header);
     for (int i = 0; i < iovcnt; i++) {
         iov[i + 1].iov_len = iovec[i].iov_len;
         iov[i + 1].iov_base = iovec[i].iov_base;
         messageLength += iov[i + 1].iov_len;
     }
+    iovcnt++; // increment for the header
     parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
                   "sending message (size=%d)", messageLength);
 
@@ -225,7 +225,7 @@ _sendIoVector(AthenaTransportLink *athenaTransportLink, struct ether_header *hea
     // Short write
     if (writeCount != messageLength) {
         linkData->_stats.send_ShortWrite++;
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write (%u < %u)", writeCount, messageLength);
         errno = EIO;
         return -1;
     }
@@ -263,8 +263,9 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         iovec = ccnxCodecNetworkBufferIoVec_GetArray(messageIoVector);
         iovcnt = ccnxCodecNetworkBufferIoVec_GetCount(messageIoVector);
     } else {
-        if (linkData->fragmenter == NULL) {
-            // Right now we work with the message in a contiguous buffer, we could optimize the copy out by working directly with the IO Vector.
+        if (linkData->fragmenter != NULL) {
+            // Right now we work with the message in a contiguous buffer.
+            // We can optimize the copy out by working directly with the IO Vector.
             message = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
             ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, message,
                                                               linkData->link.mtu, fragmentNumber);
@@ -304,7 +305,9 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     }
 
     ccnxCodecNetworkBufferIoVec_Release(&messageIoVector);
-    parcBuffer_Release(&message);
+    if (message) {
+        parcBuffer_Release(&message);
+    }
 
     return sendResult;
 }
@@ -600,6 +603,7 @@ _ETHOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
 
     // Copy the peer destination address into our link data
     memcpy(&(linkData->link.peerAddress), destination, sizeof(struct ether_addr));
+    linkData->link.peerAddressLength = ETHER_ADDR_LEN;
 
     derivedLinkName = _createNameFromLinkData(&linkData->link, false);
 
