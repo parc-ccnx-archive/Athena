@@ -52,6 +52,19 @@ typedef struct hopbyhop_header {
 } __attribute__((packed)) _HopByHopHeader;
 
 /*
+ * Mask a uint32_t down to the 20-bit sequence number
+ */
+#define SEQNUM_MASK ((uint32_t) (0x000FFFFF))
+
+/*
+ * This will right-pad the seqnum out to 32 bits.  By filling up a uint32_t it allows
+ * us to use 2's compliment math to compare two sequence numbers rather than the cumbersome
+ * multiple branches required by the method outlined in RFC 1982.
+ * We use a 20-bit sequence number, so need to shift 12 bits to the left.
+ */
+#define SEQNUM_SHIFT 12
+
+/*
  * The B bit value in the top byte of the header
  */
 #define BMASK 0x40

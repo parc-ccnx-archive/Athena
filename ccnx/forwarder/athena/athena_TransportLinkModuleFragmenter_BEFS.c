@@ -129,9 +129,59 @@ _hopByHopHeader_GetSeqnum(const _HopByHopHeader *header)
     return seqnum;
 }
 
-static void
-_hopByHopHeader_SetSequenceNumber(_HopByHopHeader *header, uint32_t seqnum)
+/**
+ * Compares sequence numbers as per RFC 1982
+ *
+ * Handles wrap-around using the 1/2 buffer rule as per RFC 1982.  The indefinate state
+ * at exactly the middle is handled by having 2^(N-1)-1 greater than and 2^(N-1) less than.
+ *
+ * @param [in] a The first sequence number
+ * @param [in] b The second sequence number
+ *
+ * @return negative If a < b
+ * @return 0 If a == b
+ * @return positive if a > b
+ *
+ * Example:
+ * @code
+ * {
+ * }
+ * @endcode
+ */
+static int
+_compareSequenceNumbers(uint32_t a, uint32_t b)
 {
+    // shift the numbers so they take up a full 32-bits and then use 2's compliment
+    // arithmatic to determine the ordering
+
+    a <<= SEQNUM_SHIFT;
+    b <<= SEQNUM_SHIFT;
+
+    int32_t c = (int32_t) (a - b);
+    return c;
+}
+
+static uint32_t
+_incrementSequenceNumber(const uint32_t seqnum, const uint32_t mask)
+{
+    uint32_t result = (seqnum + 1) & mask;
+    return result;
+}
+
+static void
+_hopByHopHeader_SetReceiveSequenceNumber(_BEFS_fragmenterData *fragmenterData, uint32_t seqnum)
+{
+    // next to expect
+    fragmenterData->receiveSequenceNumber = _incrementSequenceNumber(seqnum, SEQNUM_MASK);
+}
+
+static void
+_hopByHopHeader_SetSendSequenceNumber(_BEFS_fragmenterData *fragmenterData, _HopByHopHeader *header)
+{
+    uint32_t seqnum = fragmenterData->sendSequenceNumber;
+    // Always holds next available sequence number
+    fragmenterData->sendSequenceNumber = _incrementSequenceNumber(fragmenterData->sendSequenceNumber, SEQNUM_MASK);
+
     header->blob[2] = seqnum & 0xFF;
     header->blob[1] = (seqnum >> 8) & 0xFF;
 
@@ -160,14 +210,17 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
     assertTrue(header->packetType == METIS_PACKET_TYPE_HOPFRAG, "BEFS Unknown fragment type (%d)", header->packetType);
     uint32_t seqnum = _hopByHopHeader_GetSeqnum(header);
 
+    // If we're idle and the message is a begin fragment then continue on.
     if (fragmenterData->idle) {
         if (_hopByHopHeader_GetBFlag(header)) {
             _BEFS_ClearFragmenterData(athenaFragmenter);
             fragmenterData->idle = false;
+        } else {
+            return NULL;
         }
     } else {
         // If it's not a sequence number we were expecting, clean everything out and start over.
-        if (seqnum != fragmenterData->receiveSequenceNumber) {
+        if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber)  != 0) {
             parcBuffer_Release(&wireFormatBuffer);
             _BEFS_ClearFragmenterData(athenaFragmenter);
             return NULL;
@@ -177,7 +230,7 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
     // Gather buffers until we receive an end frame
     parcDeque_Append(fragmenterData->fragments, wireFormatBuffer);
     fragmenterData->reassembledSize += parcBuffer_Remaining(wireFormatBuffer);
-    fragmenterData->receiveSequenceNumber = seqnum + 1; // next to expect
+    _hopByHopHeader_SetReceiveSequenceNumber(fragmenterData, seqnum);
 
     if (_hopByHopHeader_GetEFlag(header)) {
         PARCBuffer *reassembledBuffer = parcBuffer_Allocate(fragmenterData->reassembledSize);
@@ -226,7 +279,7 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
         _hopByHopHeader_SetBFlag(fragmentHeader);
     }
 
-    _hopByHopHeader_SetSequenceNumber(fragmentHeader, fragmenterData->sendSequenceNumber++);
+    _hopByHopHeader_SetSendSequenceNumber(fragmenterData, fragmentHeader);
 
     if (remaining < maxPayload) {
         payloadLength = remaining;
