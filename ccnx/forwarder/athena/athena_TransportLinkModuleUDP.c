@@ -46,6 +46,7 @@
 #include <parc/algol/parc_HashCodeTable.h>
 #include <parc/algol/parc_Hash.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
+#include <ccnx/forwarder/athena/athena_Fragmenter.h>
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 
@@ -94,13 +95,17 @@ typedef struct _UDPLinkData {
         size_t send_ShortWrite;
         size_t send_SendRetry;
     } _stats;
+    AthenaFragmenter *fragmenter;
 } _UDPLinkData;
+
+#define _UDP_DEFAULT_MTU_SIZE (1024 * 64)
 
 static _UDPLinkData *
 _UDPLinkData_Create()
 {
     _UDPLinkData *linkData = parcMemory_AllocateAndClear(sizeof(_UDPLinkData));
     assertNotNull(linkData, "Could not create private data for new link");
+    linkData->link.mtu = _UDP_DEFAULT_MTU_SIZE;
     return linkData;
 }
 
@@ -117,6 +122,9 @@ _UDPLinkData_Destroy(_UDPLinkData **linkData)
     }
     if ((*linkData)->multiplexTable) {
         parcHashCodeTable_Destroy(&((*linkData)->multiplexTable));
+    }
+    if ((*linkData)->fragmenter) {
+        athenaFragmenter_Release(&((*linkData)->fragmenter));
     }
     parcMemory_Deallocate(linkData);
 }
@@ -163,30 +171,29 @@ _createNameFromLinkData(const _connectionPair *linkData)
     return parcMemory_StringDuplicate(nameBuffer, strlen(nameBuffer));
 }
 
+PARCBuffer *
+_encodingBufferIOVecToPARCBuffer(CCNxCodecEncodingBufferIOVec *encodingBufferIOVec)
+{
+    size_t totalBytes = 0;
+    for (int i = 0; i < encodingBufferIOVec->iovcnt; i++) {
+        totalBytes += encodingBufferIOVec->iov[i].iov_len;
+    }
+    PARCBuffer *buffer = parcBuffer_Allocate(totalBytes);
+    assertNotNull(buffer, "parcBuffer_Allocate failed to allocate %zu array", totalBytes);
+
+    for (int i = 0; i < encodingBufferIOVec->iovcnt; i++) {
+        parcBuffer_PutArray(buffer, encodingBufferIOVec->iov[i].iov_len, encodingBufferIOVec->iov[i].iov_base);
+    }
+    parcBuffer_SetPosition(buffer, 0);
+    return buffer;
+}
+
 static int
-_UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+_sendBuffer(AthenaTransportLink *athenaTransportLink, PARCBuffer *wireFormatBuffer)
 {
     struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
-
-    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
-                      "sending deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
-    }
-
-    // Get a wire format buffer and write it out.
-    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
-
-    parcBuffer_SetPosition(wireFormatBuffer, 0);
     size_t length = parcBuffer_Limit(wireFormatBuffer);
-    char *buffer = parcBuffer_Overlay(wireFormatBuffer, length);
-
-    if (linkData->link.mtu) {
-        if (length > linkData->link.mtu) {
-            errno = EMSGSIZE;
-            parcBuffer_Release(&wireFormatBuffer);
-            return -1;
-        }
-    }
+    const char *buffer = parcBuffer_Overlay(wireFormatBuffer, length);
 
     parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
                   "sending message (size=%d)", length);
@@ -210,7 +217,6 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
             parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
                           "send error (%s)", strerror(errno));
         }
-        parcBuffer_Release(&wireFormatBuffer);
         return -1;
     }
 
@@ -218,8 +224,69 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     if (writeCount != length) {
         linkData->_stats.send_ShortWrite++;
         parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink), "short write");
-        parcBuffer_Release(&wireFormatBuffer);
         return -1;
+    }
+
+    return 0;
+}
+
+static int
+_UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage)
+{
+    struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
+    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                      "sending deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
+    }
+
+    // Get a wire format buffer and write it out.
+    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+    parcBuffer_SetPosition(wireFormatBuffer, 0);
+    size_t messageLength = parcBuffer_Limit(wireFormatBuffer);
+    PARCBuffer *buffer = NULL;
+
+    int fragmentNumber = 0;
+    CCNxCodecEncodingBufferIOVec *ioFragment = NULL;
+
+    // Get initial IO vector message or message fragment if we need, and have, fragmentation support.
+    if (messageLength <= linkData->link.mtu) {
+        buffer = parcBuffer_Acquire(wireFormatBuffer);
+    } else {
+        if (linkData->fragmenter != NULL) {
+            ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, wireFormatBuffer,
+                                                         linkData->link.mtu, fragmentNumber);
+            if (ioFragment) {
+                buffer = _encodingBufferIOVecToPARCBuffer(ioFragment);
+                fragmentNumber++;
+            }
+        } else { // message too big and no fragmenter provided
+            parcBuffer_Release(&wireFormatBuffer);
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "message larger than mtu and no fragmention support (size=%d)", messageLength);
+            errno = EMSGSIZE;
+            return -1;
+        }
+    }
+
+    int sendResult = 0;
+    while (buffer) {
+        sendResult = _sendBuffer(athenaTransportLink, buffer);
+        parcBuffer_Release(&buffer);
+        if (ioFragment) {
+            ccnxCodecEncodingBufferIOVec_Release(&ioFragment);
+        }
+        if (sendResult == -1) {
+            break;
+        }
+        if (messageLength > linkData->link.mtu) {
+            ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, wireFormatBuffer,
+                                                         linkData->link.mtu, fragmentNumber);
+            if (ioFragment) {
+                buffer = _encodingBufferIOVecToPARCBuffer(ioFragment);
+                fragmentNumber++;
+            }
+        }
     }
 
     parcBuffer_Release(&wireFormatBuffer);
@@ -436,7 +503,9 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
     // If an MTU has been set, allocate a buffer of that size to avoid having to peek at the message,
     // othersize derive the link from the header and allocate a buffer based on the message size.
 
-    if ((messageLength = linkData->link.mtu) == 0) {
+    if (linkData->link.mtu != 0) {
+        messageLength = linkData->link.mtu;
+    } else {
         messageLength = _messageLengthFromHeader(athenaTransportLink, linkData);
         if (messageLength <= 0) {
             return NULL;
@@ -448,6 +517,10 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
     char *buffer = parcBuffer_Overlay(wireFormatBuffer, 0);
     *peerAddressLength = (socklen_t) sizeof(struct sockaddr_in);
     ssize_t readCount = recvfrom(linkData->fd, buffer, messageLength, 0, (struct sockaddr *) peerAddress, peerAddressLength);
+    // Reset to the real expected message length from the header if we didn't already obtain it
+    if (linkData->link.mtu != 0) {
+        messageLength = ccnxCodecTlvPacket_GetPacketLength(wireFormatBuffer);
+    }
 
     // On error mark the link to close or retry.
     if (readCount == -1) {
@@ -482,17 +555,22 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
     parcBuffer_SetPosition(wireFormatBuffer, parcBuffer_Position(wireFormatBuffer) + readCount);
     parcBuffer_Flip(wireFormatBuffer);
 
-    // Construct, and return a ccnxMetaMessage from the wire format buffer.
-    ccnxMetaMessage = ccnxMetaMessage_CreateFromWireFormatBuffer(wireFormatBuffer);
-    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
-        parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
-                      "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
+    // If it's not a fragment returns our passed in wireFormatBuffer, otherwise it owns the buffer and eventually
+    // passes back the aggregated message after receiving all its fragments, returning NULL in the mean time.
+    wireFormatBuffer = athenaFragmenter_ReceiveFragment(linkData->fragmenter, wireFormatBuffer);
+
+    if (wireFormatBuffer != NULL) {
+        // Construct, and return a ccnxMetaMessage from the wire format buffer.
+        ccnxMetaMessage = ccnxMetaMessage_CreateFromWireFormatBuffer(wireFormatBuffer);
+        if (ccnxMetaMessage == NULL) {
+            linkData->_stats.receive_DecodeFailed++;
+            parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Failed to decode message from received packet.");
+        } else if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
+        }
+        parcBuffer_Release(&wireFormatBuffer);
     }
-    if (ccnxMetaMessage == NULL) {
-        linkData->_stats.receive_DecodeFailed++;
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Failed to decode message from received packet.");
-    }
-    parcBuffer_Release(&wireFormatBuffer);
 
     return ccnxMetaMessage;
 }
@@ -551,7 +629,9 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
 
     linkData->link.peerAddress = *((struct sockaddr_in *) destination);
     linkData->link.peerAddressLength = sizeof(struct sockaddr_in);
-    linkData->link.mtu = mtu;
+    if (mtu) {
+        linkData->link.mtu = mtu;
+    }
 
     linkData->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (linkData->fd < 0) {
@@ -651,7 +731,9 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 
     linkData->link.myAddress = *destination;
     linkData->link.myAddressLength = sizeof(struct sockaddr_in);
-    linkData->link.mtu = mtu;
+    if (mtu) {
+        linkData->link.mtu = mtu;
+    }
 
     linkData->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (linkData->fd < 0) {
@@ -735,6 +817,17 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 #define LINK_MTU_SIZE "mtu%3D"
 #define LINK_NAME_SPECIFIER "name%3D"
 #define LOCAL_LINK_FLAG "local%3D"
+#define FRAGMENTER "fragmenter%3D"
+
+static int
+_parseFragmenterName(const char *token, char *name)
+{
+    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
+        return -1;
+    }
+    return 0;
+}
+
 
 static int
 _parseLinkName(const char *token, char *name)
@@ -824,12 +917,14 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     }
 
     bool listener = false;
-    char specifiedLinkName[MAXPATHLEN] = { 0 };
     char srcAddress[NI_MAXHOST] = "0.0.0.0";
     size_t mtu = 0;
     uint16_t srcPort = 0;
     int forceLocal = 0;
     char *linkName = NULL;
+    char specifiedLinkName[MAXPATHLEN] = { 0 };
+    char *fragmenterName = NULL;
+    char specifiedFragmenterName[MAXPATHLEN] = { 0 };
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
     size_t segments = parcURIPath_Count(remainder);
@@ -851,6 +946,19 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
                 errno = EINVAL;
                 return NULL;
             }
+            parcMemory_Deallocate(&token);
+            continue;
+        }
+
+        if (strncasecmp(token, FRAGMENTER, strlen(FRAGMENTER)) == 0) {
+            if (_parseFragmenterName(token, specifiedFragmenterName) != 0) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Improper fragmenter name specification (%s)", token);
+                parcMemory_Deallocate(&token);
+                errno = EINVAL;
+                return NULL;
+            }
+            fragmenterName = specifiedFragmenterName;
             parcMemory_Deallocate(&token);
             continue;
         }
@@ -911,6 +1019,17 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
     parcMemory_Deallocate(&destination);
     parcMemory_Deallocate(&source);
+
+    if (result && fragmenterName) {
+        struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(result);
+        linkData->fragmenter = athenaFragmenter_Create(result, fragmenterName);
+        if (linkData->fragmenter == NULL) {
+            parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                          "Failed to open/initialize %s fragmenter for %s", fragmenterName, linkName);
+            athenaTransportLink_Close(result);
+            return NULL;
+        }
+    }
 
     // forced IsLocal/IsNotLocal, mainly for testing
     if (result && forceLocal) {

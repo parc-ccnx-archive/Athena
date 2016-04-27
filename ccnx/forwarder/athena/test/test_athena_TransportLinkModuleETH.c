@@ -241,7 +241,6 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
 
     size_t mtu = 1500; // forced MTU size to detect large messages
     // Open a link we can send messages on
-    //sprintf(linkSpecificationURI, "eth://%s:%s/name=ETH_1", device, deviceMAC);
     sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);

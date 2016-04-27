@@ -56,6 +56,7 @@ set(LIBATHENA_TCP_SOURCE_FILES
     )
 
 set(LIBATHENA_UDP_SOURCE_FILES
+    athena_Fragmenter.c 
     athena_TransportLinkModuleUDP.c
     )
 
