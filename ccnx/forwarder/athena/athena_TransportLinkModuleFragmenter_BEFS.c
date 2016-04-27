@@ -48,6 +48,73 @@
  *    ICN "Begin-End" Hop by Hop Fragmentation (draft-mosko-icnrg-beginendfragment-00)
  */
 
+// Legacy names from original Metis implementation
+#define METIS_PACKET_TYPE_HOPFRAG 4
+#define T_HOPFRAG_PAYLOAD  0x0005
+
+typedef struct hopbyhop_header {
+    uint8_t version;
+    uint8_t packetType;
+    uint16_t packetLength;
+    uint8_t blob[3];
+    uint8_t headerLength;
+    uint16_t tlvType;
+    uint16_t tlvLength;
+} __attribute__((packed)) _HopByHopHeader;
+
+/*
+ * Mask a uint32_t down to the 20-bit sequence number
+ */
+#define SEQNUM_MASK ((uint32_t) (0x000FFFFF))
+
+/*
+ * This will right-pad the seqnum out to 32 bits.  By filling up a uint32_t it allows
+ * us to use 2's compliment math to compare two sequence numbers rather than the cumbersome
+ * multiple branches required by the method outlined in RFC 1982.
+ * We use a 20-bit sequence number, so need to shift 12 bits to the left.
+ */
+#define SEQNUM_SHIFT 12
+
+/*
+ * The B bit value in the top byte of the header
+ */
+#define BMASK 0x40
+
+/*
+ * The E bit value in the top byte of the header
+ */
+#define EMASK 0x20
+
+/*
+ * The I bit value in the top byte of the header
+ */
+#define IMASK 0x10
+
+/*
+ * Sets the B flag in the header
+ */
+#define _hopByHopHeader_SetBFlag(header) ((header)->blob[0] |= BMASK)
+
+/*
+ * Sets the E flag in the header
+ */
+#define _hopByHopHeader_SetEFlag(header) ((header)->blob[0] |= EMASK)
+
+/*
+ * non-zero if the B flag is set
+ */
+#define _hopByHopHeader_GetBFlag(header) ((header)->blob[0] & BMASK)
+
+/*
+ * non-zero if the E flag is set
+ */
+#define _hopByHopHeader_GetEFlag(header) ((header)->blob[0] & EMASK)
+
+/*
+ * non-zero if the I flag is set
+ */
+#define _hopByHopHeader_GetIFlag(header) ((header)->blob[0] & IMASK)
+
 /*
  * Private data used to sequence and reassemble fragments.
  */
