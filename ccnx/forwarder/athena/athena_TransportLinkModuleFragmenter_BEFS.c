@@ -242,6 +242,7 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
             parcBuffer_PutArray(reassembledBuffer, arrayLength, array);
             parcBuffer_Release(&wireFormatBuffer);
         }
+        parcBuffer_SetPosition(reassembledBuffer, 0);
         _BEFS_ClearFragmenterData(athenaFragmenter);
         return reassembledBuffer;
     }
@@ -260,11 +261,11 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
     CCNxCodecEncodingBufferIOVec *fragmentIoVec = NULL;
     _BEFS_fragmenterData *fragmenterData = _BEFS_GetFragmenterData(athenaFragmenter);
 
-    const size_t maxPayload = mtu - sizeof(_HopByHopHeader);
-    size_t payloadLength = maxPayload;
+    const size_t maxPayloadSize = mtu - sizeof(_HopByHopHeader);
+    size_t payloadLength = maxPayloadSize;
 
     size_t length = parcBuffer_Remaining(message);
-    size_t offset = maxPayload * fragmentNumber;
+    size_t offset = maxPayloadSize * fragmentNumber;
     ssize_t remaining = length - offset;
 
     if (remaining <= 0) {
@@ -281,7 +282,7 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
 
     _hopByHopHeader_SetSendSequenceNumber(fragmenterData, fragmentHeader);
 
-    if (remaining < maxPayload) {
+    if (remaining < maxPayloadSize) {
         payloadLength = remaining;
         _hopByHopHeader_SetEFlag(fragmentHeader);
     }
@@ -293,8 +294,8 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
     ccnxCodecEncodingBuffer_AppendBuffer(encodingBuffer, message);
 
     CCNxCodecEncodingBuffer *encodingBufferSlice = NULL;
-    // If NULL there's no fragment that matches the offset/length we asked for
-    encodingBufferSlice = ccnxCodecEncodingBuffer_Slice(encodingBuffer, offset, maxPayload);
+    // Returns NULL if there's no fragment that matches the offset/length we ask for
+    encodingBufferSlice = ccnxCodecEncodingBuffer_Slice(encodingBuffer, offset, maxPayloadSize);
     ccnxCodecEncodingBuffer_Release(&encodingBuffer);
 
     if (encodingBufferSlice) {

@@ -173,10 +173,11 @@ athenaEthernet_GetEtherType(AthenaEthernet *athenaEthernet)
 PARCBuffer *
 athenaEthernet_Receive(AthenaEthernet *athenaEthernet, int timeout, AthenaTransportLinkEvent *events)
 {
-    PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(athenaEthernet->mtu);
+    size_t readLength = athenaEthernet->mtu + sizeof(struct ether_header);
+    PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(readLength);
     uint8_t *buffer = parcBuffer_Overlay(wireFormatBuffer, 0);
 
-    ssize_t readCount = recv(athenaEthernet->fd, buffer, athenaEthernet->mtu, 0);
+    ssize_t readCount = recv(athenaEthernet->fd, buffer, readLength, 0);
     if (readCount == -1) {
         if ((errno == EAGAIN) || (errno == EINTR)) {
             parcLog_Info(athenaEthernet->log, "Ethernet recv retry");

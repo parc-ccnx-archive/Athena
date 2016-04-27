@@ -257,9 +257,10 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     CCNxCodecEncodingBufferIOVec *ioFragment = NULL;
     const struct iovec *iovec = NULL;
     size_t iovcnt = 0;
+    size_t maxPayloadSize = linkData->link.mtu;
 
     // Get initial IO vector message or message fragment if we need, and have, fragmentation support.
-    if (messageLength <= linkData->link.mtu) {
+    if (messageLength <= maxPayloadSize) {
         iovec = ccnxCodecNetworkBufferIoVec_GetArray(messageIoVector);
         iovcnt = ccnxCodecNetworkBufferIoVec_GetCount(messageIoVector);
     } else {
@@ -268,7 +269,7 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
             // We can optimize the copy out by working directly with the IO Vector.
             message = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
             ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, message,
-                                                              linkData->link.mtu, fragmentNumber);
+                                                         maxPayloadSize, fragmentNumber);
             if (ioFragment) {
                 iovec = ioFragment->iov;
                 iovcnt = ioFragment->iovcnt;
@@ -293,9 +294,9 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         if (sendResult == -1) {
             break;
         }
-        if (messageLength > linkData->link.mtu) {
+        if (messageLength > maxPayloadSize) {
             ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, message,
-                                                              linkData->link.mtu, fragmentNumber);
+                                                         maxPayloadSize, fragmentNumber);
             if (ioFragment) {
                 iovec = ioFragment->iov;
                 iovcnt = ioFragment->iovcnt;

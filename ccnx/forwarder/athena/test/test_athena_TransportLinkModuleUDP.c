@@ -93,6 +93,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_OpenClose)
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
 
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
+
     connectionURI = parcURI_Parse("udp://127.0.0.1:40000/name=");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name argument");
@@ -150,6 +152,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceive)
     const char *result;
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
     connectionURI = parcURI_Parse("udp://127.0.0.1:40000/Listener/name=UDPListener");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -230,6 +234,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
 
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
+
     sprintf(linkSpecificationURI, "udp://127.0.0.1:40000/Listener/name=UDPListener/mtu=%zu/fragmenter=BEFS", mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -247,8 +253,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
     CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
-    size_t largePayloadSize = 3 * mtu;
+
+    ssize_t numberOfFragments = (64 * 1024) / mtu;
+    size_t largePayloadSize = numberOfFragments * mtu;
     char largePayload[largePayloadSize];
+
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
     ccnxInterest_SetPayload(ccnxMetaMessage, payload);
     parcBuffer_Release(&payload);
@@ -270,9 +279,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
 
     usleep(1000);
 
+    size_t iterations = (largePayloadSize / mtu) + 5; // Extra reads to allow some delivery latency
     do {
         ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
-    } while (ccnxMetaMessage == NULL);
+    } while ((ccnxMetaMessage == NULL) && (iterations--));
+
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Receive return message with more than one ingress link");
     assertNotNull(ccnxMetaMessage, "athenaTransportLinkAdapter_Receive failed to provide message");
@@ -298,6 +309,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_MTU)
     const char *result;
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
     connectionURI = parcURI_Parse("udp://127.0.0.1:40000/Listener/name=UDPListener/mtu=");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -355,6 +368,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_P2P)
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
 
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
+
     connectionURI = parcURI_Parse("udp://localhost:40001/src=localhost:40002/name=UDP_0");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
@@ -400,6 +415,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_Local)
     const char *result;
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
     connectionURI = parcURI_Parse("udp://127.0.0.1:40000/Listener/name=UDP_0");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
