@@ -375,13 +375,12 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
 
     // Construct, and return a ccnxMetaMessage from the wire format buffer.
     ccnxMetaMessage = ccnxMetaMessage_CreateFromWireFormatBuffer(wireFormatBuffer);
-    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
-        parcLog_Warning(athenaTransportLink_GetLogger(athenaTransportLink),
-                        "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
-    }
     if (ccnxMetaMessage == NULL) {
         linkData->_stats.receive_DecodeFailed++;
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Failed to decode message from received packet.");
+    } else if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
+        parcLog_Warning(athenaTransportLink_GetLogger(athenaTransportLink),
+                        "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
     }
     parcBuffer_Release(&wireFormatBuffer);
 
