@@ -31,7 +31,6 @@
 #ifndef libathena_Fragmenter
 #define libathena_Fragmenter
 
-#include <parc/algol/parc_Deque.h>
 #include <ccnx/common/codec/ccnxCodec_EncodingBuffer.h>
 
 /**

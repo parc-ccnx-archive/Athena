@@ -121,7 +121,7 @@ _TemplateSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMet
 {
     struct _TemplateLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
 
-    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_CreateMessageBuffer(ccnxMetaMessage);
 
     int result = _internalSEND(linkData, wireFormatBuffer);
 

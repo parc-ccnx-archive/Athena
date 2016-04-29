@@ -184,7 +184,7 @@ _TCPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     }
 
     // Get wire format and write it out.
-    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_CreateMessageBuffer(ccnxMetaMessage);
 
     parcBuffer_SetPosition(wireFormatBuffer, 0);
     size_t length = parcBuffer_Limit(wireFormatBuffer);
@@ -280,7 +280,7 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
     struct _TCPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
     CCNxMetaMessage *ccnxMetaMessage = NULL;
 
-    // Peek at our message header to determine the total length of buffer we need to allocate.
+    // Read our message header to determine the total buffer length we need to allocate.
     size_t fixedHeaderLength = ccnxCodecTlvPacket_MinimalHeaderLength();
     PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(fixedHeaderLength);
     const uint8_t *messageHeader = parcBuffer_Overlay(wireFormatBuffer, 0);
@@ -326,7 +326,9 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
     // Could do more to check the integrity of the message and framing.
     if (messageLength < fixedHeaderLength) {
         linkData->_stats.receive_BadMessageLength++;
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Framing error, flushing link.");
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                      "Framing error, length less than required header (%zu < %zu), flushing.",
+                      messageLength, fixedHeaderLength);
         _flushLink(athenaTransportLink);
         parcBuffer_Release(&wireFormatBuffer);
         return NULL;
@@ -375,12 +377,13 @@ _TCPReceive(AthenaTransportLink *athenaTransportLink)
 
     // Construct, and return a ccnxMetaMessage from the wire format buffer.
     ccnxMetaMessage = ccnxMetaMessage_CreateFromWireFormatBuffer(wireFormatBuffer);
+    if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
+        parcLog_Warning(athenaTransportLink_GetLogger(athenaTransportLink),
+                        "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
+    }
     if (ccnxMetaMessage == NULL) {
         linkData->_stats.receive_DecodeFailed++;
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Failed to decode message from received packet.");
-    } else if (ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage) == CCNxTlvDictionary_SchemaVersion_V0) {
-        parcLog_Warning(athenaTransportLink_GetLogger(athenaTransportLink),
-                        "received deprecated version %d message\n", ccnxTlvDictionary_GetSchemaVersion(ccnxMetaMessage));
     }
     parcBuffer_Release(&wireFormatBuffer);
 

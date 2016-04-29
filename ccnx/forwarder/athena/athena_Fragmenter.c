@@ -31,7 +31,7 @@
 
 /*
  * Provide support for loadable fragmentation modules.  The fragmenter library must be named
- * libathena_ETHFragmenter_<name>, and must contain an initialization routine that is named
+ * libathena_Fragmenter_<name>, and must contain an initialization routine that is named
  * athenaFragmenter_<name>_Init.  The init routine is provided an AthenaFragmenter
  * object instance that is used to maintain private instance state for the fragmentation module.
  */

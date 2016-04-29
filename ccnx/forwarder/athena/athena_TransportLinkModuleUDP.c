@@ -241,7 +241,7 @@ _UDPSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
     }
 
     // Get a wire format buffer and write it out.
-    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+    PARCBuffer *wireFormatBuffer = athenaTransportLinkModule_CreateMessageBuffer(ccnxMetaMessage);
     parcBuffer_SetPosition(wireFormatBuffer, 0);
     size_t messageLength = parcBuffer_Limit(wireFormatBuffer);
     PARCBuffer *buffer = NULL;
@@ -431,12 +431,26 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
     _queueMessage(demuxLink, ccnxMetaMessage);
 }
 
+static void
+_flushLink(AthenaTransportLink *athenaTransportLink)
+{
+    struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+    char trash[MAXPATHLEN];
+
+    // Flush link to attempt to resync our framing
+    while (read(linkData->fd, trash, sizeof(trash)) == sizeof(trash)) {
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "... flushing link.");
+    }
+}
+
 //
 // Peek at the header and derive our total message length
 //
 static size_t
-_messageLengthFromHeader(AthenaTransportLink *athenaTransportLink, _UDPLinkData *linkData)
+_messageLengthFromHeader(AthenaTransportLink *athenaTransportLink)
 {
+    struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
     // Peek at our message header to determine the total length of buffer we need to allocate.
     size_t fixedHeaderLength = ccnxCodecTlvPacket_MinimalHeaderLength();
     PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(fixedHeaderLength);
@@ -478,12 +492,10 @@ _messageLengthFromHeader(AthenaTransportLink *athenaTransportLink, _UDPLinkData 
     // If length is greater than our MTU we will find out in the read.
     if (messageLength < fixedHeaderLength) {
         linkData->_stats.receive_BadMessageLength++;
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "Framing error, flushing link.");
-        char trash[MAXPATHLEN];
-        // Flush link to attempt to resync our framing
-        while (read(linkData->fd, trash, sizeof(trash)) == sizeof(trash)) {
-            parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "... flushing link.");
-        }
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                      "Framing error, length less than required header (%zu < %zu), flushing.",
+                      messageLength, fixedHeaderLength);
+        _flushLink(athenaTransportLink);
         return -1;
     }
 
@@ -506,7 +518,7 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
     if (linkData->link.mtu != 0) {
         messageLength = linkData->link.mtu;
     } else {
-        messageLength = _messageLengthFromHeader(athenaTransportLink, linkData);
+        messageLength = _messageLengthFromHeader(athenaTransportLink);
         if (messageLength <= 0) {
             return NULL;
         }

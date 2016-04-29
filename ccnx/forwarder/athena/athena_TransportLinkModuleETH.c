@@ -267,7 +267,7 @@ _ETHSend(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMess
         if (linkData->fragmenter != NULL) {
             // Right now we work with the message in a contiguous buffer.
             // We can optimize the copy out by working directly with the IO Vector.
-            message = athenaTransportLinkModule_GetMessageBuffer(ccnxMetaMessage);
+            message = athenaTransportLinkModule_CreateMessageBuffer(ccnxMetaMessage);
             ioFragment = athenaFragmenter_CreateFragment(linkData->fragmenter, message,
                                                          maxPayloadSize, fragmentNumber);
             if (ioFragment) {

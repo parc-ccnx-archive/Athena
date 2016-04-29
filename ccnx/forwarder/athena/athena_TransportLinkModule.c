@@ -249,7 +249,7 @@ athenaTransportLinkModule_SetLogLevel(AthenaTransportLinkModule *athenaTransport
 }
 
 PARCBuffer *
-athenaTransportLinkModule_GetMessageBuffer(CCNxMetaMessage *message)
+athenaTransportLinkModule_CreateMessageBuffer(CCNxMetaMessage *message)
 {
     PARCBuffer *buffer = ccnxWireFormatMessage_GetWireFormatBuffer(message);
 
