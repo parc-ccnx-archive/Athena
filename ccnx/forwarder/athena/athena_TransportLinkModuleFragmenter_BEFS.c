@@ -265,12 +265,11 @@ static PARCBuffer *
 _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireFormatBuffer)
 {
     // If it's not a fragment type we recognize, send it back for others to process
-    if (!_BEFS_IsFragment(wireFormatBuffer)) {
+    if ((wireFormatBuffer == NULL) || !_BEFS_IsFragment(wireFormatBuffer)) {
         return wireFormatBuffer;
     }
 
     _BEFS_fragmenterData *fragmenterData = _BEFS_GetFragmenterData(athenaFragmenter);
-    assertTrue(wireFormatBuffer != NULL, "Fragmenter reassembly called with a null buffer");
 
     // Verify the type, and move the buffer beyond the header.
     _HopByHopHeader *header = parcBuffer_Overlay(wireFormatBuffer, sizeof(_HopByHopHeader));
