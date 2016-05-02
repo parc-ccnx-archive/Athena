@@ -609,12 +609,12 @@ athenaTransportLinkAdapter_Open(AthenaTransportLinkAdapter *athenaTransportLinkA
             return NULL;
         }
     }
+    athenaTransportLinkModule_SetLogLevel(athenaTransportLinkModule, parcLog_GetLevel(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter)));
 
     AthenaTransportLink *athenaTransportLink = athenaTransportLinkModule_Open(athenaTransportLinkModule, connectionURI);
     if (athenaTransportLink == NULL) {
         return NULL;
     }
-    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkAdapter->log));
 
     return athenaTransportLink_GetName(athenaTransportLink);
 }

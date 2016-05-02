@@ -624,6 +624,7 @@ _ETHOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
         return NULL;
     }
 
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
     _setConnectLinkState(athenaTransportLink, linkData);
 
     // Enable Sends
@@ -720,6 +721,7 @@ _ETHOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
         _ETHLinkData_Destroy(&linkData);
         return athenaTransportLink;
     }
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
 
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
     athenaTransportLink_SetEventFd(athenaTransportLink, athenaEthernet_GetDescriptor(linkData->athenaEthernet));

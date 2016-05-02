@@ -505,6 +505,7 @@ _TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
         return athenaTransportLink;
     }
 
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
     _setConnectLinkState(athenaTransportLink, linkData);
 
     parcLog_Info(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
@@ -657,6 +658,7 @@ _TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
         return athenaTransportLink;
     }
 
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
     athenaTransportLink_SetEventFd(athenaTransportLink, linkData->fd);
 

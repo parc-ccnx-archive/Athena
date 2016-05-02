@@ -284,6 +284,7 @@ _TemplateOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *con
         return athenaTransportLink;
     }
 
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
     athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Send);
 

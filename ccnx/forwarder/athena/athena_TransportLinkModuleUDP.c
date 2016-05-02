@@ -697,6 +697,7 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
         return NULL;
     }
 
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
     _setConnectLinkState(athenaTransportLink, linkData);
     // Enable Send? XXX
     athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Send);
@@ -810,6 +811,7 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
         return athenaTransportLink;
     }
 
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
     athenaTransportLink_SetEventFd(athenaTransportLink, linkData->fd);
 
