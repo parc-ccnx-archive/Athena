@@ -234,8 +234,6 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
 
-    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
-
     sprintf(linkSpecificationURI, "udp://127.0.0.1:40000/Listener/name=UDPListener/mtu=%zu/fragmenter=BEFS", mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -247,6 +245,8 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
+
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
     athenaTransportLinkAdapter_Poll(athenaTransportLinkAdapter, 0);
 

@@ -279,18 +279,24 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
     // If we're idle and the message is a begin fragment then continue on.
     if (fragmenterData->idle) {
         if (_hopByHopHeader_GetBFlag(header)) {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received begin fragment");
             _BEFS_ClearFragmenterData(athenaFragmenter);
             fragmenterData->idle = false;
         } else {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received fragment while idle");
             return NULL;
         }
     } else {
         // If it's not a sequence number we were expecting, clean everything out and start over.
         if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber)  != 0) {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+	                  "Received fragment out of sequence (%zu != %zu)",
+	                  seqnum, fragmenterData->receiveSequenceNumber);
             parcBuffer_Release(&wireFormatBuffer);
             _BEFS_ClearFragmenterData(athenaFragmenter);
             return NULL;
         }
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received fragment %zu", seqnum);
     }
 
     // Gather buffers until we receive an end frame
@@ -299,6 +305,7 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
     _hopByHopHeader_SetReceiveSequenceNumber(fragmenterData, seqnum);
 
     if (_hopByHopHeader_GetEFlag(header)) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received end fragment");
         PARCBuffer *reassembledBuffer = parcBuffer_Allocate(fragmenterData->reassembledSize);
         // Currently we cannot decode from an IO vector, so must copy into a buffer (See BugzID: 903)
         while (parcDeque_Size(fragmenterData->fragments) > 0) {
@@ -315,6 +322,7 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
 
     // If it's an Idle frame, make sure we're clear and ready.
     if (_hopByHopHeader_GetIFlag(header)) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received idle fragment");
         _BEFS_ClearFragmenterData(athenaFragmenter);
     }
 
@@ -343,12 +351,16 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
     _HopByHopHeader *fragmentHeader = parcBuffer_Overlay(fragmentHeaderBuffer, 0);
 
     if (fragmentNumber == 0) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                      "Creating %zu fragment number %zu", mtu, fragmentNumber);
         _hopByHopHeader_SetBFlag(fragmentHeader);
     }
 
     _hopByHopHeader_SetSendSequenceNumber(fragmenterData, fragmentHeader);
 
     if (remaining < maxPayloadSize) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                      "Creating %zu end fragment number %zu", mtu, fragmentNumber);
         payloadLength = remaining;
         _hopByHopHeader_SetEFlag(fragmentHeader);
     }
@@ -370,6 +382,8 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
 
         fragmentIoVec = ccnxCodecEncodingBuffer_CreateIOVec(encodingBufferSlice);
         ccnxCodecEncodingBuffer_Release(&encodingBufferSlice);
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                      "Created %zu fragment number %zu", mtu, fragmentNumber);
     }
 
     parcBuffer_Release(&fragmentHeaderBuffer);
@@ -380,12 +394,16 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
 static void
 _athenaFragmenter_BEFS_Fini(AthenaFragmenter *athenaFragmenter)
 {
+    parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                  "Destroying BEFS fragmenter");
     _BEFS_DestroyFragmenterData(athenaFragmenter);
 }
 
 AthenaFragmenter *
 athenaFragmenter_BEFS_Init(AthenaFragmenter *athenaFragmenter)
 {
+    parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                  "Creating BEFS fragmenter");
     athenaFragmenter->fragmenterData = _BEFS_CreateFragmenterData();
     athenaFragmenter->createFragment = (AthenaFragmenter_CreateFragment *)_BEFS_CreateFragment;
     athenaFragmenter->receiveFragment = (AthenaFragmenter_ReceiveFragment *)_BEFS_ReceiveAndReassemble;

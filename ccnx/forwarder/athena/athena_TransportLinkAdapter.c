@@ -614,6 +614,7 @@ athenaTransportLinkAdapter_Open(AthenaTransportLinkAdapter *athenaTransportLinkA
     if (athenaTransportLink == NULL) {
         return NULL;
     }
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkAdapter->log));
 
     return athenaTransportLink_GetName(athenaTransportLink);
 }

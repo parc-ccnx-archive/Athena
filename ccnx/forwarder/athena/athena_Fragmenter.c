@@ -115,6 +115,7 @@ _nameToLibrary(const char *name)
 static void
 _destroy(AthenaFragmenter **athenaFragmenter)
 {
+    parcLog_Debug(athenaTransportLink_GetLogger((*athenaFragmenter)->athenaTransportLink), "Detached %s", (*athenaFragmenter)->moduleName);
     if ((*athenaFragmenter)->fini) {
         (*athenaFragmenter)->fini(*athenaFragmenter);
     }
@@ -160,6 +161,7 @@ athenaFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fr
         errno = ENODEV;
         return NULL;
     }
+    parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Attached %s", athenaFragmenter->moduleName);
 
     return athenaFragmenter;
 }
@@ -172,6 +174,8 @@ PARCBuffer *
 athenaFragmenter_ReceiveFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireFormatBuffer)
 {
     if (athenaFragmenter && athenaFragmenter->receiveFragment) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+	              "%s received fragment (%zu)", athenaFragmenter->moduleName, parcBuffer_Remaining(wireFormatBuffer));
         return athenaFragmenter->receiveFragment(athenaFragmenter, wireFormatBuffer);
     }
     return wireFormatBuffer;
@@ -181,6 +185,8 @@ CCNxCodecEncodingBufferIOVec *
 athenaFragmenter_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, size_t mtu, int fragmentNumber)
 {
     if (athenaFragmenter && athenaFragmenter->createFragment) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+	              "%s created fragment (%zu)", athenaFragmenter->moduleName, mtu);
         return athenaFragmenter->createFragment(athenaFragmenter, message, mtu, fragmentNumber);
     } else {
         errno = ENOENT;
