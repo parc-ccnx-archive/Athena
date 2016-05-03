@@ -76,9 +76,12 @@ static size_t
 _calculateSizeOfContentObject(const CCNxContentObject *contentObject)
 {
     size_t result = 0;
-    char *nameAsString = ccnxName_ToString(ccnxContentObject_GetName(contentObject));
-    result += strlen(nameAsString);
-    parcMemory_DeallocateImpl((void **) &nameAsString);
+    const CCNxName *ccnxName = ccnxContentObject_GetName(contentObject);
+    if (ccnxName) {
+        char *nameAsString = ccnxName_ToString(ccnxName);
+        result += strlen(nameAsString);
+        parcMemory_DeallocateImpl((void **) &nameAsString);
+    }
 
     PARCBuffer *payload = ccnxContentObject_GetPayload(contentObject);
     if (payload != NULL) {
@@ -162,14 +165,19 @@ _athenaLRUContentStoreEntry_Finalize(_AthenaLRUContentStoreEntry **entryPtr)
 static void
 _athenaLRUContentStoreEntry_Display(const _AthenaLRUContentStoreEntry *entry, int indentation)
 {
-    CCNxName *name = ccnxContentObject_GetName(entry->contentObject);
-    char *nameString = ccnxName_ToString(name);
     int childIndentation = indentation + 2; //strlen("AthenaLRUContentStoreEntry");
     parcDisplayIndented_PrintLine(indentation,
                                   "AthenaLRUContentStoreEntry {%p, prev = %p, next = %p, co = %p, size = %zu",
                                   entry, entry->prev, entry->next,
                                   entry->contentObject, entry->sizeInBytes);
-    parcDisplayIndented_PrintLine(childIndentation, "Name: %p [%s]", name, nameString);
+    const CCNxName *name = ccnxContentObject_GetName(entry->contentObject);
+    if (name) {
+        char *nameString = ccnxName_ToString(name);
+        parcDisplayIndented_PrintLine(childIndentation, "Name: %p [%s]", name, nameString);
+        parcMemory_Deallocate(&nameString);
+    } else {
+        parcDisplayIndented_PrintLine(childIndentation, "Name: NULL");
+    }
     if (entry->hasExpiryTime) {
         parcDisplayIndented_PrintLine(childIndentation, "ExpiryTime: [%"
                                       PRIu64
@@ -183,7 +191,6 @@ _athenaLRUContentStoreEntry_Display(const _AthenaLRUContentStoreEntry *entry, in
     }
 
     parcDisplayIndented_PrintLine(childIndentation, "}");
-    parcMemory_Deallocate(&nameString);
 }
 
 static

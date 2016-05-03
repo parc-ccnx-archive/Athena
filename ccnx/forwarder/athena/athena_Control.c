@@ -74,8 +74,15 @@ athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVector
                 parcBitVector_Set(egressVector, linkId);
             }
 
-            parcLog_Debug(athena->log, "Adding %s route to interface %d",
-                          ccnxName_ToString(prefix), parcBitVector_NextBitSet(egressVector, 0));
+            if (prefix) {
+                const char *name = ccnxName_ToString(prefix);
+                parcLog_Debug(athena->log, "Adding %s route to interface %d",
+                              name, parcBitVector_NextBitSet(egressVector, 0));
+                parcMemory_Deallocate(&name);
+            } else {
+                parcLog_Debug(athena->log, "Adding NULL route to interface %d",
+                              parcBitVector_NextBitSet(egressVector, 0));
+            }
             athenaFIB_AddRoute(athena->athenaFIB, prefix, egressVector);
 
             PARCJSON *json = ccnxControl_GetJson(control);
