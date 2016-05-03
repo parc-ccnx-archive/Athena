@@ -434,6 +434,11 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
         // Use the same fragmentation as our parent
         if (linkData->fragmenter) {
             newLinkData->fragmenter = athenaFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
+            if (newLinkData->fragmenter == NULL) {
+                parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                              "Failed to open/initialize %s fragmenter for new link: %s",
+                              linkData->fragmenter->moduleName, strerror(errno));
+            }
         }
 
         // We use our parents fd to send, and receive demux'd messages from our parent on our queue
@@ -952,7 +957,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         linkData->fragmenter = athenaFragmenter_Create(result, fragmenterName);
         if (linkData->fragmenter == NULL) {
             parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                          "Failed to open/initialize %s fragmenter for %s", fragmenterName, linkName);
+                          "Failed to open/initialize %s fragmenter for %s: %s", fragmenterName, linkName, strerror(errno));
             athenaTransportLink_Close(result);
             return NULL;
         }

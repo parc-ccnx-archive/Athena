@@ -1039,7 +1039,7 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         linkData->fragmenter = athenaFragmenter_Create(result, fragmenterName);
         if (linkData->fragmenter == NULL) {
             parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                          "Failed to open/initialize %s fragmenter for %s", fragmenterName, linkName);
+                          "Failed to open/initialize %s fragmenter for %s: %s", fragmenterName, linkName, strerror(errno));
             athenaTransportLink_Close(result);
             return NULL;
         }
