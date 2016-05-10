@@ -445,7 +445,7 @@ _create_FIBList_response(Athena *athena, CCNxName *ccnxName, PARCList *fibEntryL
 }
 
 static CCNxMetaMessage *
-_FIB_Command(Athena *athena, CCNxInterest *interest, PARCBitVector *ingress)
+_FIB_Command(Athena *athena, CCNxInterest *interest)
 {
     CCNxMetaMessage *responseMessage;
     responseMessage = athenaFIB_ProcessMessage(athena->athenaFIB, interest);
@@ -469,37 +469,25 @@ _FIB_Command(Athena *athena, CCNxInterest *interest, PARCBitVector *ingress)
 
             char linkName[MAXPATHLEN];
             char prefix[MAXPATHLEN];
-            PARCBitVector *linkVector;
 
-            // {Add,Remove} Route arguments "<prefix> [<linkName>]", if linkName not specified, use the incoming link id ([de-]registration)
-            int numberOfArguments = sscanf(arguments, "%s %s", prefix, linkName);
-            if (numberOfArguments == 2) {
-                int linkId = athenaTransportLinkAdapter_LinkNameToId(athena->athenaTransportLinkAdapter, linkName);
-                if (linkId == -1) {
-                    responseMessage = _create_response(athena, ccnxName, "Unknown linkName %s", linkName);
-                    parcMemory_Deallocate(&command);
-                    parcMemory_Deallocate(&arguments);
-                    return responseMessage;
-                }
-                linkVector = parcBitVector_Create();
-                parcBitVector_Set(linkVector, linkId);
-            } else if (numberOfArguments == 1) { // use ingress link
-                linkVector = parcBitVector_Acquire(ingress);
-            } else {
-                responseMessage = _create_response(athena, ccnxName, "No prefix specified or too many arguments");
+            // {Add,Remove} Route arguments "<prefix> <linkName>"
+            sscanf(arguments, "%s %s", prefix, linkName);
+            int linkId = athenaTransportLinkAdapter_LinkNameToId(athena->athenaTransportLinkAdapter, linkName);
+            if (linkId == -1) {
+                responseMessage = _create_response(athena, ccnxName, "Unknown linkName %s", linkName);
                 parcMemory_Deallocate(&command);
                 parcMemory_Deallocate(&arguments);
                 return responseMessage;
             }
-
             CCNxName *prefixName = ccnxName_CreateFromCString(prefix);
             if (prefixName == NULL) {
                 responseMessage = _create_response(athena, ccnxName, "Unable to parse prefix %s", prefix);
                 parcMemory_Deallocate(&command);
                 parcMemory_Deallocate(&arguments);
-                parcBitVector_Release(&linkVector);
                 return responseMessage;
             }
+            PARCBitVector *linkVector = parcBitVector_Create();
+            parcBitVector_Set(linkVector, linkId);
 
             int result = false;
             if (strcasecmp(command, AthenaCommand_Add) == 0) {
@@ -510,7 +498,7 @@ _FIB_Command(Athena *athena, CCNxInterest *interest, PARCBitVector *ingress)
 
             if (result == true) {
                 char *routePrefix = ccnxName_ToString(prefixName);
-                const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, parcBitVector_NextBitSet(linkVector, 0));
+                const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
                 responseMessage = _create_response(athena, ccnxName, "%s route %s -> %s", command, routePrefix, linkIdName);
                 athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s %s", routePrefix, linkIdName);
                 parcMemory_Deallocate(&routePrefix);
@@ -613,7 +601,7 @@ athenaInterestControl(Athena *athena, CCNxInterest *interest, PARCBitVector *ing
 
     ccnxComponentName = ccnxName_CreateFromCString(CCNxNameAthena_FIB);
     if (ccnxName_StartsWith(ccnxName, ccnxComponentName) == true) {
-        responseMessage = _FIB_Command(athena, interest, ingressVector);
+        responseMessage = _FIB_Command(athena, interest);
     }
     ccnxName_Release(&ccnxComponentName);
 

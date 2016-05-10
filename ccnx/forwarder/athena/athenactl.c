@@ -224,8 +224,8 @@ _athenactl_AddLink(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_AddRoute(PARCIdentity *identity, int argc, char **argv)
 {
-    if (argc < 1) {
-        printf("usage: add route [<linkName>] <prefix>\n");
+    if (argc < 2) {
+        printf("usage: add route <linkName> <prefix>\n");
         return 1;
     }
 
@@ -233,23 +233,12 @@ _athenactl_AddRoute(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    char *linkName = NULL;
-    char *prefix = NULL;
-
-    if (argc == 1) {
-        prefix = argv[0];
-    } else {
-        linkName = argv[0];
-        prefix = argv[1];
-    }
+    char *linkName = argv[0];
+    char *prefix = argv[1];
 
     // passed in as <linkName> <prefix>, passed on as <prefix> <linkname>
     char routeArguments[MAXPATHLEN];
-    if (linkName) {
-        sprintf(routeArguments, "%s %s", prefix, linkName);
-    } else {
-        sprintf(routeArguments, "%s", prefix);
-    }
+    sprintf(routeArguments, "%s %s", prefix, linkName);
     PARCBuffer *payload = parcBuffer_AllocateCString(routeArguments);
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
@@ -268,8 +257,8 @@ _athenactl_AddRoute(PARCIdentity *identity, int argc, char **argv)
 static int
 _athenactl_RemoveRoute(PARCIdentity *identity, int argc, char **argv)
 {
-    if (argc < 1) {
-        printf("usage: remove route [<linkName>] <prefix>\n");
+    if (argc < 2) {
+        printf("usage: remove route <linkName> <prefix>\n");
         return 1;
     }
 
@@ -277,23 +266,12 @@ _athenactl_RemoveRoute(PARCIdentity *identity, int argc, char **argv)
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
-    char *linkName = NULL;
-    char *prefix = NULL;
-
-    if (argc == 1) {
-        prefix = argv[0];
-    } else {
-        linkName = argv[0];
-        prefix = argv[1];
-    }
+    char *linkName = argv[0];
+    char *prefix = argv[1];
 
     // passed in as <linkName> <prefix>, passed on as <prefix> <linkname>
     char routeArguments[MAXPATHLEN];
-    if (linkName) {
-        sprintf(routeArguments, "%s %s", prefix, linkName);
-    } else {
-        sprintf(routeArguments, "%s", prefix);
-    }
+    sprintf(routeArguments, "%s %s", prefix, linkName);
     PARCBuffer *payload = parcBuffer_AllocateCString(routeArguments);
     ccnxInterest_SetPayload(interest, payload);
     parcBuffer_Release(&payload);
