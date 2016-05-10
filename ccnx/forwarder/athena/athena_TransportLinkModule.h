@@ -223,7 +223,7 @@ void athenaTransportLinkModule_SetAddLinkCallback(AthenaTransportLinkModule *ath
  */
 void athenaTransportLinkModule_SetLogLevel(AthenaTransportLinkModule *athenaTransportLinkModule, const PARCLogLevel level);
 
-PARCBuffer *athenaTransportLinkModule_GetMessageBuffer(CCNxMetaMessage *message);
+PARCBuffer *athenaTransportLinkModule_CreateMessageBuffer(CCNxMetaMessage *message);
 
 CCNxCodecNetworkBufferIoVec *athenaTransportLinkModule_GetMessageIoVector(CCNxMetaMessage *message);
 

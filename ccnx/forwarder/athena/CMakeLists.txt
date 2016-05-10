@@ -21,6 +21,7 @@ set(ATHENA_SOURCE_FILES
     athenactl_About.c 
     athena_Control.c 
     athena_InterestControl.c 
+    athena_Fragmenter.c 
     athena_FIB.c 
     athena_ContentStore.c 
     athena_LRUContentStore.c 
@@ -38,6 +39,7 @@ set(ATHENA_HEADER_FILES
     athena_ContentStoreInterface.h
     athena_Control.h
     athena_Ethernet.h
+    athena_Fragmenter.h
     athena_FIB.h
     athena_InterestControl.h
     athena_LRUContentStore.h
@@ -54,12 +56,18 @@ set(LIBATHENA_TCP_SOURCE_FILES
     )
 
 set(LIBATHENA_UDP_SOURCE_FILES
+    athena_Fragmenter.c 
     athena_TransportLinkModuleUDP.c
     )
 
 set(LIBATHENA_ETH_SOURCE_FILES
+    athena_Fragmenter.c 
     athena_TransportLinkModuleETH.c
     ${ATHENA_PLATFORM_MODULES}
+    )
+
+set(LIBATHENA_FRAGMENT_BEFS_SOURCE_FILES
+    athena_TransportLinkModuleFragmenter_BEFS.c
     )
 
 set(LIBATHENA_TEMPLATE_SOURCE_FILES
@@ -87,6 +95,7 @@ source_group(Sources FILES ${ATHENA_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_TCP_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_UDP_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_ETH_SOURCE_FILES})
+source_group(Sources FILES ${LIBATHENA_FRAGMENT_BEFS_SOURCE_FILES})
 source_group(Sources FILES ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 
 add_library(athena_ETH.shared SHARED ${LIBATHENA_ETH_SOURCE_FILES})
@@ -95,6 +104,13 @@ set_target_properties(athena_ETH.shared PROPERTIES
   SOVERSION 1
   VERSION 1.0
   OUTPUT_NAME athena_ETH )
+
+add_library(athena_Fragmenter_BEFS.shared SHARED ${LIBATHENA_FRAGMENT_BEFS_SOURCE_FILES})
+set_target_properties(athena_Fragmenter_BEFS.shared PROPERTIES
+  C_STANDARD 99
+  SOVERSION 1
+  VERSION 1.0
+  OUTPUT_NAME athena_Fragmenter_BEFS )
 
 add_library(athena_TEMPLATE.shared SHARED ${LIBATHENA_TEMPLATE_SOURCE_FILES})
 set_target_properties(athena_TEMPLATE.shared PROPERTIES
@@ -108,6 +124,7 @@ set(athena_libraries
   athena_TCP.shared
   athena_UDP.shared
   athena_ETH.shared
+  athena_Fragmenter_BEFS.shared
   athena_TEMPLATE.shared
   )
 

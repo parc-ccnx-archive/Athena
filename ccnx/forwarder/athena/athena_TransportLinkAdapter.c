@@ -609,6 +609,7 @@ athenaTransportLinkAdapter_Open(AthenaTransportLinkAdapter *athenaTransportLinkA
             return NULL;
         }
     }
+    athenaTransportLinkModule_SetLogLevel(athenaTransportLinkModule, parcLog_GetLevel(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter)));
 
     AthenaTransportLink *athenaTransportLink = athenaTransportLinkModule_Open(athenaTransportLinkModule, connectionURI);
     if (athenaTransportLink == NULL) {
@@ -660,6 +661,7 @@ athenaTransportLinkAdapter_Poll(AthenaTransportLinkAdapter *athenaTransportLinkA
                 }
             }
         }
+        events += result;
     }
 
     result = poll(pollfdSendList, pollfdListSize, 0);

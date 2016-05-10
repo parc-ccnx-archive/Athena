@@ -306,7 +306,11 @@ athenaEthernet_Send(AthenaEthernet *athenaEthernet, struct iovec *iov, int iovcn
 
     writeCount = writev(athenaEthernet->fd, iov, iovcnt);
 
-    parcLog_Debug(athenaEthernet->log, "sending message (size=%d)", writeCount);
+    if (writeCount == -1) {
+        parcLog_Error(athenaEthernet->log, "writev: %s", strerror(errno));
+    } else {
+        parcLog_Debug(athenaEthernet->log, "sending message (size=%d)", writeCount);
+    }
 
     return writeCount;
 }

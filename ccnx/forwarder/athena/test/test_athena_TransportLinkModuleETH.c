@@ -67,6 +67,7 @@ LONGBOW_TEST_FIXTURE(Global)
 {
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive);
+    LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments);
 }
 
 LONGBOW_TEST_FIXTURE_SETUP(Global)
@@ -238,9 +239,9 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
+    size_t mtu = 1500; // forced MTU size to detect large messages
     // Open a link we can send messages on
-    //sprintf(linkSpecificationURI, "eth://%s:%s/name=ETH_1", device, deviceMAC);
-    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
@@ -274,8 +275,6 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
     parcBitVector_Release(&resultVector);
-    parcBitVector_Release(&sendVector);
-
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
     // Allow a context switch for the sends to complete
@@ -303,6 +302,25 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
+    // Try to send a large (>mtu) message
+    name = ccnxName_CreateFromCString("lci:/foo/bar");
+    ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+
+    size_t largePayloadSize = mtu * 2;
+    char largePayload[largePayloadSize];
+    PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
+    ccnxInterest_SetPayload(ccnxMetaMessage, payload);
+    athena_EncodeMessage(ccnxMetaMessage);
+
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
+
+    parcBuffer_Release(&payload);
+    parcBitVector_Release(&sendVector);
+    parcBitVector_Release(&resultVector);
+    ccnxMetaMessage_Release(&ccnxMetaMessage);
+
     // Close one end of the connection
     int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "ETHListener");
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
@@ -313,6 +331,110 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
 }
 
+LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
+{
+    PARCURI *connectionURI;
+    char linkSpecificationURI[MAXPATHLEN];
+    char deviceMAC[NI_MAXHOST];
+    const char *result;
+
+    AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
+    assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    const char *device = _getInterfaceByName();
+    assertNotNull(device, "Could not find an available ethernet device");
+
+    struct ether_addr myAddress;
+    athenaEthernet_GetInterfaceMAC(device, &myAddress);
+    sprintf(deviceMAC, "%2.2hhx:%2.2hhx:%2.2hhx:%2.2hhx:%2.2hhx:%2.2hhx",
+            myAddress.ether_addr_octet[0], myAddress.ether_addr_octet[1],
+            myAddress.ether_addr_octet[2], myAddress.ether_addr_octet[3],
+            myAddress.ether_addr_octet[4], myAddress.ether_addr_octet[5]);
+
+    size_t mtu = 1500; // forced MTU size for fragmentation
+
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=XXXX/mtu=%zu", device, mtu);
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad fragmenter");
+    parcURI_Release(&connectionURI);
+
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=BEFS/mtu=%zu", device, mtu);
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+
+    // If we can't open a device (i.e. we're not root), the test can not continue.
+    if ((result == NULL) && (errno == EBADF)) {
+        parcURI_Release(&connectionURI);
+        athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
+        return;
+    }
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    // Open a link we can send messages on
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/fragmenter=BEFS/mtu=%zu", device, mtu);
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+    free((void *) device);
+
+    // Enable debug logging after all instances are open
+    athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
+
+    // Construct an interest
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
+    CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+
+    PARCBitVector *sendVector = parcBitVector_Create();
+
+    // Send the interest out on the link, this message will also be received by ourself
+    // since we're sending it to our own MAC destination.
+    int linkId = athenaTransportLinkAdapter_LinkNameToId(athenaTransportLinkAdapter, "ETH_1");
+    parcBitVector_Set(sendVector, linkId);
+
+    // Try to send a large (>mtu) message
+
+#ifdef __linux__
+    size_t largePayloadSize = 0xffdd; // Maximum payload size
+#else // MacOS
+    size_t largePayloadSize = mtu * 4; // four is the maximum that MacOS will queue without a reader
+#endif
+    char largePayload[largePayloadSize];
+    PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
+    ccnxInterest_SetPayload(ccnxMetaMessage, payload);
+    athena_EncodeMessage(ccnxMetaMessage);
+
+    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
+
+    parcBuffer_Release(&payload);
+    parcBitVector_Release(&sendVector);
+    parcBitVector_Release(&resultVector);
+    ccnxMetaMessage_Release(&ccnxMetaMessage);
+
+    size_t iterations = (largePayloadSize / mtu) + 5;
+    // Receive the large message
+    do {
+        // Allow a context switch for the sends to complete
+        usleep(1000);
+        ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    } while (iterations-- && (ccnxMetaMessage == NULL));
+    assertNotNull(ccnxMetaMessage, "Could not reassemble fragmented message");
+    parcBitVector_Release(&resultVector);
+    ccnxMetaMessage_Release(&ccnxMetaMessage);
+
+    // Close one end of the connection
+    int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "ETHListener");
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
+
+    closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "ETH_1");
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
+
+    athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
+}
 LONGBOW_TEST_FIXTURE(Local)
 {
 }

@@ -82,7 +82,8 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
     }
 
     // Get index of specified interface
-    struct ifreq if_idx = { 0 };
+    struct ifreq if_idx;
+    bzero(&if_idx, sizeof(struct ifreq));
     strncpy(if_idx.ifr_name, interface, strlen(interface) + 1);
     if (ioctl(athenaEthernet->fd, SIOCGIFINDEX, &if_idx) == -1) {
         parcLog_Error(athenaEthernet->log, "SIOCGIFINDEX: %s", strerror(errno));
@@ -103,7 +104,8 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
     }
 
     // Populate the configured physical MAC
-    struct ifreq if_mac = { 0 };
+    struct ifreq if_mac;
+    bzero(&if_mac, sizeof(struct ifreq));
     memset(&if_mac, 0, sizeof(if_mac));
     strncpy(if_mac.ifr_name, interface, strlen(interface) + 1);
     if (ioctl(athenaEthernet->fd, SIOCGIFHWADDR, &if_mac) == -1) {
@@ -148,7 +150,8 @@ athenaEthernet_GetInterfaceMAC(const char *device, struct ether_addr *ether_addr
     }
 
     // Get index of specified interface
-    struct ifreq ifr = { 0 };
+    struct ifreq ifr;
+    bzero(&ifr, sizeof(struct ifreq));
     strcpy(ifr.ifr_name, device);
     if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1) {
         perror("SIOCGIFHWADDR");
@@ -170,10 +173,11 @@ athenaEthernet_GetEtherType(AthenaEthernet *athenaEthernet)
 PARCBuffer *
 athenaEthernet_Receive(AthenaEthernet *athenaEthernet, int timeout, AthenaTransportLinkEvent *events)
 {
-    PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(athenaEthernet->mtu);
+    size_t readLength = athenaEthernet->mtu + sizeof(struct ether_header);
+    PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(readLength);
     uint8_t *buffer = parcBuffer_Overlay(wireFormatBuffer, 0);
 
-    ssize_t readCount = recv(athenaEthernet->fd, buffer, athenaEthernet->mtu, 0);
+    ssize_t readCount = recv(athenaEthernet->fd, buffer, readLength, 0);
     if (readCount == -1) {
         if ((errno == EAGAIN) || (errno == EINTR)) {
             parcLog_Info(athenaEthernet->log, "Ethernet recv retry");
@@ -195,6 +199,12 @@ athenaEthernet_Send(AthenaEthernet *athenaEthernet, struct iovec *iov, int iovcn
     ssize_t writeCount;
 
     writeCount = writev(athenaEthernet->fd, iov, iovcnt);
+
+    if (writeCount == -1) {
+        parcLog_Error(athenaEthernet->log, "writev: %s", strerror(errno));
+    } else {
+        parcLog_Debug(athenaEthernet->log, "sending message (size=%d)", writeCount);
+    }
 
     return writeCount;
 }
