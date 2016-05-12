@@ -362,13 +362,14 @@ _newLink(AthenaTransportLink *athenaTransportLink, _ETHLinkData *newLinkData)
 {
     // Accept a new tunnel connection.
 
-    // Clone a new link from the current listener.
+    // Clone a new link from the current listener (source).
     const char *derivedLinkName = _createNameFromLinkData(&newLinkData->link, false);
     AthenaTransportLink *newTransportLink = athenaTransportLink_Clone(athenaTransportLink,
                                                                       derivedLinkName,
                                                                       _ETHSend,
                                                                       _ETHReceiveProxy,
                                                                       _ETHClose);
+
     if (newTransportLink == NULL) {
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
                       "athenaTransportLink_Clone failed");
@@ -376,6 +377,26 @@ _newLink(AthenaTransportLink *athenaTransportLink, _ETHLinkData *newLinkData)
         _ETHLinkData_Destroy(&newLinkData);
         return NULL;
     }
+
+    struct _ETHLinkData *sourceLinkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+    if (sourceLinkData->fragmenter) {
+        newLinkData->fragmenter = athenaFragmenter_Create(athenaTransportLink, sourceLinkData->fragmenter->moduleName);
+        if (newLinkData->fragmenter == NULL) {
+            parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "Failed to open/initialize %s fragmenter for new link: %s",
+                          sourceLinkData->fragmenter->moduleName, strerror(errno));
+        }
+    }
+
+    // We use the source's fd to send, and receive demux'd messages from our source on our queue
+    newLinkData->athenaEthernet = athenaEthernet_Acquire(sourceLinkData->athenaEthernet);
+    newLinkData->queue = parcDeque_Create();
+    assertNotNull(newLinkData->queue, "Could not create data queue for new link");
+
+    newLinkData->link.myAddressLength = sourceLinkData->link.myAddressLength;
+    memcpy(&newLinkData->link.myAddress, &sourceLinkData->link.myAddress, sourceLinkData->link.myAddressLength);
+
+    newLinkData->link.mtu = sourceLinkData->link.mtu;
 
     _setConnectLinkState(newTransportLink, newLinkData);
 
@@ -430,24 +451,6 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
     // If it's an unknown peer, try to create a new link
     if (demuxLink == NULL) {
         _ETHLinkData *newLinkData = _ETHLinkData_Create();
-
-        // Use the same fragmentation as our parent
-        if (linkData->fragmenter) {
-            newLinkData->fragmenter = athenaFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
-            if (newLinkData->fragmenter == NULL) {
-                parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
-                              "Failed to open/initialize %s fragmenter for new link: %s",
-                              linkData->fragmenter->moduleName, strerror(errno));
-            }
-        }
-
-        // We use our parents fd to send, and receive demux'd messages from our parent on our queue
-        newLinkData->athenaEthernet = athenaEthernet_Acquire(linkData->athenaEthernet);
-        newLinkData->queue = parcDeque_Create();
-        assertNotNull(newLinkData->queue, "Could not create data queue for new link");
-
-        newLinkData->link.myAddressLength = linkData->link.myAddressLength;
-        memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, linkData->link.myAddressLength);
 
         newLinkData->link.peerAddressLength = peerAddressLength;
         memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddressLength);
