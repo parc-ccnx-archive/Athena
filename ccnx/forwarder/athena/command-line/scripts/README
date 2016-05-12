@@ -4,16 +4,16 @@
 #
 # Copyright (c) 2016, Xerox Corporation (Xerox) and Palo Alto Research Center, Inc (PARC)
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-# 
+#
 # * Redistributions of source code must retain the above copyright
 #   notice, this list of conditions and the following disclaimer.
 # * Redistributions in binary form must reproduce the above copyright
 #   notice, this list of conditions and the following disclaimer in the
 #   documentation and/or other materials provided with the distribution.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 # ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 # WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -24,7 +24,7 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-# 
+#
 # ################################################################################
 # #
 # # PATENT NOTICE
@@ -47,7 +47,7 @@
 # # Do not remove this header notification.  The contents of this section must be
 # # present in all distributions of the software.  You may only modify your own
 # # intellectual property statements.  Please provide contact information.
-# 
+#
 # - Palo Alto Research Center, Inc
 # This software distribution does not grant any rights to patents owned by Palo
 # Alto Research Center, Inc (PARC). Rights to these patents are available via
@@ -60,13 +60,13 @@
 #
 ###################################################
 
-             
+            
  ########  Description ########
  athenaTopologyGen.py script reads the dot file and builds athena connections automatically
  based on the topology.
-                 
+                
  This is a work-in-progress and as a result this is a guide but not a guarantee.
-                                      
+                                     
  ########  Using   #########
  You will need to install correct python packages on MAC/Linux systems
 
@@ -79,31 +79,31 @@
 
  sudo pip install graphviz
  sudo pip install pydotplus
-                             
+                            
  More information on how to write dot files is available here
  www.graphviz.org/Documentation/dotguide.pdf
-                                
+                               
  ######## Contents #########
-                                  
+                                 
  XXX: WORK IN PROGRESS
-                                    
+                                   
  What you will find here:
-                                      
+                                     
  * Sample dot file (athena.dot)
 
    This file can be converted into pdf (to view graphical version) by using
    dot -Tpdf athena.dot -o athena.pdf
-                                      
+                                     
  * athenaTopologyGen.py
-                                               
-   This file reads the dot files and builds all athena connections as specified 
+                                              
+   This file reads the dot files and builds all athena connections as specified
    in dot file by name and port numbers
- 
+
    To run the script, just say
    python athenaTopology.py athena.dot
 
  ######## Developer Info #########
-                                                           
+                                                          
  Format of the dot file is currently as follows
 
  Nodes are named as n[number]_[port_number]
@@ -111,9 +111,9 @@
  [number] is used to generate udp port numbers as follows
  <5[number]00> as starting port and then incremented for each link on an instance
 
- The script can be extended to add routes automatically as well. 
+ The script can be extended to add routes automatically as well.
 
- Currently this script only builds udp links but it can be extended to 
+ Currently this script only builds udp links but it can be extended to
  build tcp or ethernet links.
 
  ######## Testing Info #########
@@ -126,7 +126,7 @@
  The script generates the keyfile with password foo
 
  <name_of_conn> is specified in dot file on the link
- 
+
  And any services can run after that. The script was tested with
 
  export METIS_PORT=<control_port_number>
