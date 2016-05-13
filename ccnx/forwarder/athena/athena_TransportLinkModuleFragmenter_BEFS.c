@@ -290,8 +290,8 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
         // If it's not a sequence number we were expecting, clean everything out and start over.
         if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber)  != 0) {
             parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
-	                  "Received fragment out of sequence (%zu != %zu)",
-	                  seqnum, fragmenterData->receiveSequenceNumber);
+                          "Received fragment out of sequence (%zu != %zu)",
+                          seqnum, fragmenterData->receiveSequenceNumber);
             parcBuffer_Release(&wireFormatBuffer);
             _BEFS_ClearFragmenterData(athenaFragmenter);
             return NULL;
@@ -334,6 +334,7 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
 {
     CCNxCodecEncodingBufferIOVec *fragmentIoVec = NULL;
     _BEFS_fragmenterData *fragmenterData = _BEFS_GetFragmenterData(athenaFragmenter);
+    assertTrue(mtu > sizeof(_HopByHopHeader), "MTU too small (%zu)", mtu);
 
     const size_t maxPayloadSize = mtu - sizeof(_HopByHopHeader);
     size_t payloadLength = maxPayloadSize;
