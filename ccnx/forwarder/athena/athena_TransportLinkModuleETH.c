@@ -439,8 +439,6 @@ _queueMessage(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMet
 static unsigned long
 _hashAddress(struct ether_addr *address)
 {
-        // Accept a new tunnel connection.
-        // Accept a new tunnel connection.
     unsigned long id = 1; // localhost mac is 00:00:..., result must be non-zero
     int i;
 
