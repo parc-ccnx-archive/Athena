@@ -5,22 +5,22 @@ Current design documents for Athena:
     PARC-CCNxAthenaForwarder.pdf
     PARC-CCNxTransportLinkAdapter.pdf
 
-Skeltons for the TransportLinkAdapter, ContentStore, PIT and FIB are temporarily located in Libccnx/ccnx/common.
+Athena users guide:
+    PARC-AthenaUsersGuide.pdf
 
-Libccnx/ccnx/common
-    ccnx_PIT.c
-    ccnx_PIT.h
-    ccnx_FIB.c
-    ccnx_FIB.h
-    ccnx_TransportLinkAdapter.c
-    ccnx_TransportLinkAdapter.h
-    ccnx_ContentStore.c
-    ccnx_ContentStore.h
+The TransportLinkAdapter, ContentStore, PIT and FIB are located in Athena/ccnx/forwarder/athena
 
-The Athena forwarder is located in the Apps directory of Distillery.
+Athena/ccnx/forwarder/athena
+    athena_PIT.c
+    athena_PIT.h
+    athena_FIB.c
+    athena_FIB.h
+    athena_TransportLinkAdapter.c
+    athena_TransportLinkAdapter.h
+    athena_ContentStore.c
+    athena_ContentStore.h
 
-Apps/Athena/src
-    athena.c
-    athena.h
-    athenaControl.c
-    athena_About.c
+The Athena forwarder is located in the command-line sub-directory
+
+Athena/ccnx/forwarder/athena/command-line/athena
+    athena_main.c
