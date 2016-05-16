@@ -370,6 +370,7 @@ _ETHReceiveProxy(AthenaTransportLink *athenaTransportLink)
 static void
 _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _ETHLinkData *linkData)
 {
+    assertNull(athenaTransportLink_GetPrivateData(athenaTransportLink), "Private data has already been set.");
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
 
     // Register file descriptor to be polled.  This must be set before adding the link (case ???).

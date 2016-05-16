@@ -328,10 +328,10 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
     }
 
     uint16_t payloadLength = parcBuffer_Remaining(wireFormatBuffer);
-    if (payloadLength != (htons(header->packetLength) - sizeof(_HopByHopHeader))) {
+    if (payloadLength != (ntohs(header->packetLength) - sizeof(_HopByHopHeader))) {
         parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
                       "Received fragment of wrong size (%zu != %zu)",
-                      payloadLength, (htons(header->packetLength) - sizeof(_HopByHopHeader)));
+                      payloadLength, (ntohs(header->packetLength) - sizeof(_HopByHopHeader)));
         parcBuffer_Release(&wireFormatBuffer);
         _BEFS_ClearFragmenterData(athenaFragmenter);
         return NULL;
