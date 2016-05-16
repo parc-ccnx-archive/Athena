@@ -299,9 +299,19 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
         parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received fragment %zu", seqnum);
     }
 
+    uint16_t payloadLength = parcBuffer_Remaining(wireFormatBuffer);
+    if (payloadLength != (htons(header->packetLength) - sizeof(_HopByHopHeader))) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                      "Received fragment of wrong size (%zu != %zu)",
+                      payloadLength, (htons(header->packetLength) - sizeof(_HopByHopHeader)));
+        parcBuffer_Release(&wireFormatBuffer);
+        _BEFS_ClearFragmenterData(athenaFragmenter);
+        return NULL;
+    }
+
     // Gather buffers until we receive an end frame
     parcDeque_Append(fragmenterData->fragments, wireFormatBuffer);
-    fragmenterData->reassembledSize += parcBuffer_Remaining(wireFormatBuffer);
+    fragmenterData->reassembledSize += payloadLength;
     _hopByHopHeader_SetReceiveSequenceNumber(fragmenterData, seqnum);
 
     if (_hopByHopHeader_GetEFlag(header)) {
