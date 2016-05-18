@@ -252,7 +252,21 @@ LONGBOW_TEST_CASE(Global, athena_ProcessContentObject)
 
     parcBitVector_Release(&ingressVector);
 
+    // Make sure we recover processing a "nameless" content object
+    payload = parcBuffer_WrapCString("Hello World");
+    CCNxContentObject *reply = ccnxContentObject_CreateWithPayload(payload);
+    parcBuffer_Release(&payload);
+
+    CCNxMetaMessage *response = ccnxMetaMessage_CreateFromContentObject(reply);
+    ccnxContentObject_Release(&reply);
+    athena_EncodeMessage(response);
+
+    athena_ProcessMessage(athena, response, ingressVector);
+
+    assertNull(ingressVector, "Processing nameless content object didn't fail.");
+
     ccnxInterest_Release(&contentObject);
+    ccnxInterest_Release(&response);
     athena_Release(&athena);
 }
 
