@@ -318,8 +318,8 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
         // If it's not a sequence number we were expecting, clean everything out and start over.
         if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber)  != 0) {
             parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
-	                  "Received fragment out of sequence (%zu != %zu)",
-	                  seqnum, fragmenterData->receiveSequenceNumber);
+                          "Received fragment out of sequence (%zu != %zu)",
+                          seqnum, fragmenterData->receiveSequenceNumber);
             parcBuffer_Release(&wireFormatBuffer);
             _BEFS_ClearFragmenterData(athenaFragmenter);
             return NULL;
@@ -327,9 +327,19 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
         parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received fragment %zu", seqnum);
     }
 
+    uint16_t payloadLength = parcBuffer_Remaining(wireFormatBuffer);
+    if (payloadLength != (ntohs(header->packetLength) - sizeof(_HopByHopHeader))) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                      "Received fragment of wrong size (%zu != %zu)",
+                      payloadLength, (ntohs(header->packetLength) - sizeof(_HopByHopHeader)));
+        parcBuffer_Release(&wireFormatBuffer);
+        _BEFS_ClearFragmenterData(athenaFragmenter);
+        return NULL;
+    }
+
     // Gather buffers until we receive an end frame
     parcDeque_Append(fragmenterData->fragments, wireFormatBuffer);
-    fragmenterData->reassembledSize += parcBuffer_Remaining(wireFormatBuffer);
+    fragmenterData->reassembledSize += payloadLength;
     _hopByHopHeader_SetReceiveSequenceNumber(fragmenterData, seqnum);
 
     if (_hopByHopHeader_GetEFlag(header)) {
@@ -362,6 +372,7 @@ _BEFS_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *message, si
 {
     CCNxCodecEncodingBufferIOVec *fragmentIoVec = NULL;
     _BEFS_fragmenterData *fragmenterData = _BEFS_GetFragmenterData(athenaFragmenter);
+    assertTrue(mtu > sizeof(_HopByHopHeader), "MTU too small (%zu)", mtu);
 
     const size_t maxPayloadSize = mtu - sizeof(_HopByHopHeader);
     size_t payloadLength = maxPayloadSize;

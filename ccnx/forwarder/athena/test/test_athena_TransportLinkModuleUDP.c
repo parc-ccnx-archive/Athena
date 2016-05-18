@@ -278,8 +278,10 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
 
     athenaTransportLinkAdapter_Poll(athenaTransportLinkAdapter, 0);
 
+    // Construct an interest
     CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
-    CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    CCNxMetaMessage *sendMessage = ccnxInterest_CreateSimple(name);
+    CCNxMetaMessage *receivedMessage = NULL;
     ccnxName_Release(&name);
 
     ssize_t numberOfFragments = (64 * 1024) / mtu;
@@ -287,43 +289,61 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     char largePayload[largePayloadSize];
 
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
-    ccnxInterest_SetPayload(ccnxMetaMessage, payload);
+    ccnxInterest_SetPayload(sendMessage, payload);
     parcBuffer_Release(&payload);
+    athena_EncodeMessage(sendMessage);
 
     PARCBitVector *sendVector = parcBitVector_Create();
-
     int linkId = athenaTransportLinkAdapter_LinkNameToId(athenaTransportLinkAdapter, "UDP_1");
     parcBitVector_Set(sendVector, linkId);
 
-    athena_EncodeMessage(ccnxMetaMessage);
-    PARCBitVector *resultVector;
-    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     assertTrue(resultVector, "athenaTransportLinkAdapter_Send failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send failed to send large message");
     parcBitVector_Release(&resultVector);
-    ccnxMetaMessage_Release(&ccnxMetaMessage);
-    parcBitVector_Release(&sendVector);
-
-    usleep(1000);
 
     size_t iterations = (largePayloadSize / mtu) + 5; // Extra reads to allow some delivery latency
     do {
-        ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
-    } while ((ccnxMetaMessage == NULL) && (iterations--));
+        usleep(1000);
+        receivedMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    } while ((receivedMessage == NULL) && (iterations--));
 
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Receive return message with more than one ingress link");
-    assertNotNull(ccnxMetaMessage, "athenaTransportLinkAdapter_Receive failed to provide message");
+    assertNotNull(receivedMessage, "athenaTransportLinkAdapter_Receive failed to reassemble message");
+    ccnxMetaMessage_Release(&receivedMessage);
+
+    // Send the message back on the link it was received on, this link was created by the listener
+    // so we don't know its name until we send the first message to it.
+    parcBitVector_ClearVector(sendVector, sendVector); // zero out the vector
+    parcBitVector_SetVector(sendVector, resultVector); // sendVector == resultVector
     parcBitVector_Release(&resultVector);
-    ccnxMetaMessage_Release(&ccnxMetaMessage);
+
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
+    parcBitVector_Release(&resultVector);
+
+    iterations = (largePayloadSize / mtu) + 5; // Extra reads to allow some delivery latency
+    do {
+        usleep(1000);
+        receivedMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    } while ((receivedMessage == NULL) && (iterations--));
+
+    assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Receive return message with more than one ingress link");
+    assertNotNull(receivedMessage, "athenaTransportLinkAdapter_Receive failed to reassemble message");
+    ccnxMetaMessage_Release(&receivedMessage);
+    parcBitVector_Release(&resultVector);
+
+    parcBitVector_Release(&sendVector);
+    ccnxMetaMessage_Release(&sendMessage);
 
     // Close one end of the connection and send a message from the other.
     int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "UDPListener");
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
 
-    ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 1);
-    assertNull(resultVector, "athenaTransportLinkAdapter_Receive should have failed");
+    receivedMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 1);
+    assertNull(receivedMessage, "athenaTransportLinkAdapter_Receive should have failed");
 
     closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "UDP_1");
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));

@@ -370,6 +370,7 @@ _ETHReceiveProxy(AthenaTransportLink *athenaTransportLink)
 static void
 _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _ETHLinkData *linkData)
 {
+    assertNull(athenaTransportLink_GetPrivateData(athenaTransportLink), "Private data has already been set.");
     athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
 
     // Register file descriptor to be polled.  This must be set before adding the link (case ???).
@@ -386,9 +387,35 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _ETHLinkData *lin
 }
 
 static AthenaTransportLink *
-_newLink(AthenaTransportLink *athenaTransportLink, _ETHLinkData *newLinkData)
+_cloneNewLink(AthenaTransportLink *athenaTransportLink, struct ether_addr *peerAddress, socklen_t peerAddressLength)
 {
-    // Accept a new tunnel connection.
+    struct _ETHLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
+    _ETHLinkData *newLinkData = _ETHLinkData_Create();
+
+    // Use the same fragmentation as our parent
+    if (linkData->fragmenter) {
+        newLinkData->fragmenter = athenaFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
+        if (newLinkData->fragmenter == NULL) {
+            parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                          "Failed to open/initialize %s fragmenter for new link: %s",
+                          linkData->fragmenter->moduleName, strerror(errno));
+        }
+    }
+
+    // Propagate our parents MTU
+    newLinkData->link.mtu = linkData->link.mtu;
+
+    // We use our parents fd to send, and receive demux'd messages from our parent on our queue
+    newLinkData->athenaEthernet = athenaEthernet_Acquire(linkData->athenaEthernet);
+    newLinkData->queue = parcDeque_Create();
+    assertNotNull(newLinkData->queue, "Could not create data queue for new link");
+
+    newLinkData->link.myAddressLength = linkData->link.myAddressLength;
+    memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, linkData->link.myAddressLength);
+
+    newLinkData->link.peerAddressLength = peerAddressLength;
+    memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddressLength);
 
     // Clone a new link from the current listener.
     const char *derivedLinkName = _createNameFromLinkData(&newLinkData->link, false);
@@ -422,6 +449,9 @@ _newLink(AthenaTransportLink *athenaTransportLink, _ETHLinkData *newLinkData)
     }
 
     parcMemory_Deallocate(&derivedLinkName);
+
+    // Enable Sends
+    athenaTransportLink_SetEvent(newTransportLink, AthenaTransportLinkEvent_Send);
 
     // Could pass a message back here regarding the new link.
     return newTransportLink;
@@ -457,30 +487,7 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
 
     // If it's an unknown peer, try to create a new link
     if (demuxLink == NULL) {
-        _ETHLinkData *newLinkData = _ETHLinkData_Create();
-
-        // Use the same fragmentation as our parent
-        if (linkData->fragmenter) {
-            newLinkData->fragmenter = athenaFragmenter_Create(athenaTransportLink, linkData->fragmenter->moduleName);
-            if (newLinkData->fragmenter == NULL) {
-                parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
-                              "Failed to open/initialize %s fragmenter for new link: %s",
-                              linkData->fragmenter->moduleName, strerror(errno));
-            }
-        }
-
-        // We use our parents fd to send, and receive demux'd messages from our parent on our queue
-        newLinkData->athenaEthernet = athenaEthernet_Acquire(linkData->athenaEthernet);
-        newLinkData->queue = parcDeque_Create();
-        assertNotNull(newLinkData->queue, "Could not create data queue for new link");
-
-        newLinkData->link.myAddressLength = linkData->link.myAddressLength;
-        memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, linkData->link.myAddressLength);
-
-        newLinkData->link.peerAddressLength = peerAddressLength;
-        memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddressLength);
-
-        demuxLink = _newLink(athenaTransportLink, newLinkData);
+        demuxLink = _cloneNewLink(athenaTransportLink, peerAddress, peerAddressLength);
         if (demuxLink) {
             parcHashCodeTable_Add(linkData->multiplexTable, (void *) _hashAddress(peerAddress), demuxLink);
         }

@@ -203,7 +203,7 @@ athenaFragmenter_ReceiveFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer 
 {
     if (athenaFragmenter && athenaFragmenter->receiveFragment) {
         parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
-	              "%s received fragment (%zu)", athenaFragmenter->moduleName, parcBuffer_Remaining(wireFormatBuffer));
+                      "%s received fragment (%zu)", athenaFragmenter->moduleName, parcBuffer_Remaining(wireFormatBuffer));
         return athenaFragmenter->receiveFragment(athenaFragmenter, wireFormatBuffer);
     }
     return wireFormatBuffer;
@@ -214,7 +214,7 @@ athenaFragmenter_CreateFragment(AthenaFragmenter *athenaFragmenter, PARCBuffer *
 {
     if (athenaFragmenter && athenaFragmenter->createFragment) {
         parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
-	              "%s created fragment (%zu)", athenaFragmenter->moduleName, mtu);
+                      "%s created fragment (%zu)", athenaFragmenter->moduleName, mtu);
         return athenaFragmenter->createFragment(athenaFragmenter, message, mtu, fragmentNumber);
     } else {
         errno = ENOENT;
