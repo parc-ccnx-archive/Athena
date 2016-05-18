@@ -555,17 +555,11 @@ _FIB_Command(Athena *athena, CCNxInterest *interest, PARCBitVector *ingress)
             }
 
             if (result == true) {
-                if (prefixName) {
-                    char *routePrefix = ccnxName_ToString(prefixName);
-                    const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
-                    responseMessage = _create_response(athena, ccnxName, "%s route %s -> %s", command, routePrefix, linkIdName);
-                    athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s %s", routePrefix, linkIdName);
-                    parcMemory_Deallocate(&routePrefix);
-                } else {
-                    const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
-                    responseMessage = _create_response(athena, ccnxName, "%s route <empty> -> %s", command, linkIdName);
-                    athenaInterestControl_LogConfigurationChange(athena, ccnxName, "<empty> %s", linkIdName);
-                }
+                char *routePrefix = ccnxName_ToString(prefixName);
+                const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, parcBitVector_NextBitSet(linkVector, 0));
+                responseMessage = _create_response(athena, ccnxName, "%s route %s -> %s", command, routePrefix, linkIdName);
+                athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s %s", routePrefix, linkIdName);
+                parcMemory_Deallocate(&routePrefix);
             } else {
                 responseMessage = _create_response(athena, ccnxName, "%s failed", command);
             }
