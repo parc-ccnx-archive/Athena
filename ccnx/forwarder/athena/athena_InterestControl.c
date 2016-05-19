@@ -166,9 +166,11 @@ void
 athenaInterestControl_LogConfigurationChange(Athena *athena, CCNxName *ccnxName, const char *format, ...)
 {
     if (athena->configurationLog) {
-        const char *name = ccnxName_ToString(ccnxName);
-        parcOutputStream_WriteCString(athena->configurationLog, name);
-        parcMemory_Deallocate(&name);
+        if (ccnxName) {
+            const char *name = ccnxName_ToString(ccnxName);
+            parcOutputStream_WriteCString(athena->configurationLog, name);
+            parcMemory_Deallocate(&name);
+        }
 
         char configurationLogBuffer[MAXPATHLEN] = {0};
         if (format) {
@@ -428,22 +430,38 @@ _create_FIBList_response(Athena *athena, CCNxName *ccnxName, PARCList *fibEntryL
         AthenaFIBListEntry *entry = parcList_GetAtIndex(fibEntryList, i);
         if (entry != NULL) {
             CCNxName *prefixName = athenaFIBListEntry_GetName(entry);
-            char *prefix = ccnxName_ToString(prefixName);
-            int linkId = athenaFIBListEntry_GetLinkId(entry);
-            const char *linkName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
-            parcLog_Debug(athena->log, "  Route: %s->%s", prefix, linkName);
+            if (prefixName) {
+                char *prefix = ccnxName_ToString(prefixName);
+                int linkId = athenaFIBListEntry_GetLinkId(entry);
+                const char *linkName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
+                parcLog_Debug(athena->log, "  Route: %s->%s", prefix, linkName);
 
-            PARCJSON *jsonItem = parcJSON_Create();
-            parcJSON_AddString(jsonItem, JSON_KEY_NAME, prefix);
-            parcJSON_AddString(jsonItem, JSON_KEY_LINK, linkName);
+                PARCJSON *jsonItem = parcJSON_Create();
+                parcJSON_AddString(jsonItem, JSON_KEY_NAME, prefix);
+                parcJSON_AddString(jsonItem, JSON_KEY_LINK, linkName);
 
-            PARCJSONValue *jsonItemValue = parcJSONValue_CreateFromJSON(jsonItem);
-            parcJSON_Release(&jsonItem);
+                PARCJSONValue *jsonItemValue = parcJSONValue_CreateFromJSON(jsonItem);
+                parcJSON_Release(&jsonItem);
 
-            parcJSONArray_AddValue(jsonEntryList, jsonItemValue);
-            parcJSONValue_Release(&jsonItemValue);
+                parcJSONArray_AddValue(jsonEntryList, jsonItemValue);
+                parcJSONValue_Release(&jsonItemValue);
 
-            parcMemory_Deallocate(&prefix);
+                parcMemory_Deallocate(&prefix);
+            } else {
+                int linkId = athenaFIBListEntry_GetLinkId(entry);
+                const char *linkName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
+                parcLog_Debug(athena->log, "  Route: <empty>->%s", linkName);
+
+                PARCJSON *jsonItem = parcJSON_Create();
+                parcJSON_AddString(jsonItem, JSON_KEY_NAME, "");
+                parcJSON_AddString(jsonItem, JSON_KEY_LINK, linkName);
+
+                PARCJSONValue *jsonItemValue = parcJSONValue_CreateFromJSON(jsonItem);
+                parcJSON_Release(&jsonItem);
+
+                parcJSONArray_AddValue(jsonEntryList, jsonItemValue);
+                parcJSONValue_Release(&jsonItemValue);
+            }
         }
     }
 
@@ -525,11 +543,17 @@ _FIB_Command(Athena *athena, CCNxInterest *interest)
             }
 
             if (result == true) {
-                char *routePrefix = ccnxName_ToString(prefixName);
-                const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
-                responseMessage = _create_response(athena, ccnxName, "%s route %s -> %s", command, routePrefix, linkIdName);
-                athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s %s", routePrefix, linkIdName);
-                parcMemory_Deallocate(&routePrefix);
+                if (prefixName) {
+                    char *routePrefix = ccnxName_ToString(prefixName);
+                    const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
+                    responseMessage = _create_response(athena, ccnxName, "%s route %s -> %s", command, routePrefix, linkIdName);
+                    athenaInterestControl_LogConfigurationChange(athena, ccnxName, "%s %s", routePrefix, linkIdName);
+                    parcMemory_Deallocate(&routePrefix);
+                } else {
+                    const char *linkIdName = athenaTransportLinkAdapter_LinkIdToName(athena->athenaTransportLinkAdapter, linkId);
+                    responseMessage = _create_response(athena, ccnxName, "%s route <empty> -> %s", command, linkIdName);
+                    athenaInterestControl_LogConfigurationChange(athena, ccnxName, "<empty> %s", linkIdName);
+                }
             } else {
                 responseMessage = _create_response(athena, ccnxName, "%s failed", command);
             }

@@ -281,7 +281,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
 
     // Construct an interest
     CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
-    CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    CCNxMetaMessage *sendMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
     PARCBitVector *sendVector = parcBitVector_Create();
@@ -291,24 +291,24 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     int linkId = athenaTransportLinkAdapter_LinkNameToId(athenaTransportLinkAdapter, "ETH_1");
     parcBitVector_Set(sendVector, linkId);
 
-    athena_EncodeMessage(ccnxMetaMessage);
+    athena_EncodeMessage(sendMessage);
     PARCBitVector *resultVector;
-    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
     parcBitVector_Release(&resultVector);
 
     // Send the message a second time
-    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
     parcBitVector_Release(&resultVector);
-    ccnxMetaMessage_Release(&ccnxMetaMessage);
+    ccnxMetaMessage_Release(&sendMessage);
 
     // Allow a context switch for the sends to complete
     usleep(1000);
 
-    ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    CCNxMetaMessage *ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Receive return message with more than one ingress link");
     assertNotNull(ccnxMetaMessage, "athenaTransportLinkAdapter_Receive failed to provide message");
@@ -332,22 +332,22 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
 
     // Try to send a large (>mtu) message
     name = ccnxName_CreateFromCString("lci:/foo/bar");
-    ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    sendMessage = ccnxInterest_CreateSimple(name);
     ccnxName_Release(&name);
 
     size_t largePayloadSize = mtu * 2;
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
-    ccnxInterest_SetPayload(ccnxMetaMessage, payload);
-    athena_EncodeMessage(ccnxMetaMessage);
+    ccnxInterest_SetPayload(sendMessage, payload);
+    athena_EncodeMessage(sendMessage);
 
-    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
 
     parcBuffer_Release(&payload);
     parcBitVector_Release(&sendVector);
     parcBitVector_Release(&resultVector);
-    ccnxMetaMessage_Release(&ccnxMetaMessage);
+    ccnxMetaMessage_Release(&sendMessage);
 
     // Close one end of the connection
     int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "ETHListener");
@@ -413,17 +413,18 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 
     // Construct an interest
     CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
-    CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    CCNxMetaMessage *sendMessage = ccnxInterest_CreateSimple(name);
+    CCNxMetaMessage *receivedMessage = NULL;
     ccnxName_Release(&name);
 
     PARCBitVector *sendVector = parcBitVector_Create();
 
-    // Send the interest out on the link, this message will also be received by ourself
+    // Send the interest out on the link, this message will be reflected on the sending link
     // since we're sending it to our own MAC destination.
     int linkId = athenaTransportLinkAdapter_LinkNameToId(athenaTransportLinkAdapter, "ETH_1");
     parcBitVector_Set(sendVector, linkId);
 
-    // Try to send a large (>mtu) message
+    // Construct a large (>mtu) message
 
 #ifdef __linux__
     size_t largePayloadSize = 0xffdd; // Maximum payload size
@@ -432,27 +433,58 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 #endif
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
-    ccnxInterest_SetPayload(ccnxMetaMessage, payload);
-    athena_EncodeMessage(ccnxMetaMessage);
-
-    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
-
+    ccnxInterest_SetPayload(sendMessage, payload);
     parcBuffer_Release(&payload);
-    parcBitVector_Release(&sendVector);
-    parcBitVector_Release(&resultVector);
-    ccnxMetaMessage_Release(&ccnxMetaMessage);
+    athena_EncodeMessage(sendMessage);
 
+    // Send it out on ETH_1
+    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
+    parcBitVector_Release(&resultVector);
+
+    // Receive the reconstructed message, this may take some time, we discard the reflected message
     size_t iterations = (largePayloadSize / mtu) + 5;
+    do {
+        // Allow a context switch for the sends to complete
+        usleep(1000);
+        receivedMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+        // If this is a local copy, discard it and wait for the transmitted one
+        if (resultVector && parcBitVector_Equals(sendVector, resultVector)) {
+            ccnxMetaMessage_Release(&receivedMessage);
+            parcBitVector_Release(&resultVector);
+        }
+    } while (iterations-- && (receivedMessage == NULL));
+    assertNotNull(receivedMessage, "Could not reassemble fragmented message");
+    ccnxMetaMessage_Release(&receivedMessage);
+
+    // Send the message back on the link it was received on, this link was created by the ethernet listener
+    // so we don't know about it until we send the first message to it.
+    parcBitVector_ClearVector(sendVector, sendVector); // zero out the vector
+    parcBitVector_SetVector(sendVector, resultVector); // sendVector == resultVector
+    parcBitVector_Release(&resultVector);
+
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
+    parcBitVector_Release(&resultVector);
+
+    // Receive the reconstructed message, discarding any reflections
+    iterations = (largePayloadSize / mtu) + 5;
     // Receive the large message
     do {
         // Allow a context switch for the sends to complete
         usleep(1000);
-        ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
-    } while (iterations-- && (ccnxMetaMessage == NULL));
-    assertNotNull(ccnxMetaMessage, "Could not reassemble fragmented message");
+        receivedMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+        // If this is a local copy, discard it and wait for the transmitted one
+        if (resultVector && parcBitVector_Equals(sendVector, resultVector)) {
+            ccnxMetaMessage_Release(&receivedMessage);
+            parcBitVector_Release(&resultVector);
+        }
+    } while (iterations-- && (receivedMessage == NULL));
+    assertNotNull(receivedMessage, "Could not reassemble fragmented message");
+    ccnxMetaMessage_Release(&receivedMessage);
+
+    parcBitVector_Release(&sendVector);
     parcBitVector_Release(&resultVector);
-    ccnxMetaMessage_Release(&ccnxMetaMessage);
+    ccnxMetaMessage_Release(&sendMessage);
 
     // Close one end of the connection
     int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "ETHListener");
@@ -463,6 +495,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 
     athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
 }
+
 LONGBOW_TEST_FIXTURE(Local)
 {
 }
