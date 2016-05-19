@@ -81,6 +81,7 @@ typedef struct AthenaEthernet {
     uint16_t etherType;
     uint32_t mtu;
     PARCLog *log;
+    const char *ifname;
 } AthenaEthernet;
 
 static void
