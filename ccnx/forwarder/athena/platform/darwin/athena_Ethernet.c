@@ -148,6 +148,7 @@ _open_socket(const char *device)
     strncpy(if_idx.ifr_name, device, strlen(device) + 1);
     if (ioctl(etherSocket, BIOCSETIF, &if_idx)) {
         perror("BIOCSETIF");
+        close(etherSocket);
         return -1;
     }
 
@@ -155,6 +156,7 @@ _open_socket(const char *device)
     uint32_t on = 1;
     if (ioctl(etherSocket, BIOCIMMEDIATE, &on)) {
         perror("BIOCIMMEDIATE");
+        close(etherSocket);
         return -1;
     }
 
@@ -178,6 +180,7 @@ _open_socket(const char *device)
     filterCode.bf_insns = &instructions[0];
     if (ioctl(etherSocket, BIOCSETF, &filterCode) < 0) {
         perror("BIOCSETF");
+        close(etherSocket);
         return -1;
     }
 
