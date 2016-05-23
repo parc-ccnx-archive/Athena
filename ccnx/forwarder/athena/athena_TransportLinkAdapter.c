@@ -864,17 +864,20 @@ athenaTransportLinkAdapter_Send(AthenaTransportLinkAdapter *athenaTransportLinkA
         athenaTransportLinkAdapter->stats.messageSend_Attempted++;
         if (nextLinkToWrite >= parcArrayList_Size(athenaTransportLinkAdapter->instanceList)) {
             athenaTransportLinkAdapter->stats.messageSend_LinkDoesNotExist++;
+            parcBitVector_Set(resultVector, nextLinkToWrite);
             nextLinkToWrite++;
             continue;
         }
         AthenaTransportLink *athenaTransportLink = parcArrayList_Get(athenaTransportLinkAdapter->instanceList, nextLinkToWrite);
         if (athenaTransportLink == NULL) {
             athenaTransportLinkAdapter->stats.messageSend_LinkDoesNotExist++;
+            parcBitVector_Set(resultVector, nextLinkToWrite);
             nextLinkToWrite++;
             continue;
         }
         if (!(athenaTransportLink_GetEvent(athenaTransportLink) & AthenaTransportLinkEvent_Send)) {
             athenaTransportLinkAdapter->stats.messageSend_LinkNotAcceptingSendRequests++;
+            parcBitVector_Set(resultVector, nextLinkToWrite);
             nextLinkToWrite++;
             continue;
         }
@@ -892,13 +895,18 @@ athenaTransportLinkAdapter_Send(AthenaTransportLinkAdapter *athenaTransportLinkA
         int result = athenaTransportLink_Send(athenaTransportLink, ccnxMetaMessage);
         if (result == 0) {
             athenaTransportLinkAdapter->stats.messageSent++;
-            parcBitVector_Set(resultVector, nextLinkToWrite);
         } else {
             athenaTransportLinkAdapter->stats.messageSend_LinkSendFailed++;
+            parcBitVector_Set(resultVector, nextLinkToWrite);
         }
         nextLinkToWrite++;
     }
 
+    if (parcBitVector_NumberOfBitsSet(resultVector) == 0) {
+        parcBitVector_Release(&resultVector);
+    }
+
+    // A NULL resultVector means message was successfully sent to all links
     return resultVector;
 }
 

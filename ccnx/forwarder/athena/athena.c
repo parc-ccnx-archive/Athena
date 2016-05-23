@@ -253,9 +253,11 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
 
                 // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
                 parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
-                PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
+                PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
                                                                         ingressVector);
-                parcBitVector_Release(&result);
+                if (failedLinks != NULL) {
+                    parcBitVector_Release(&failedLinks);
+                }
             } else {
                 const char *name = ccnxName_ToString(ccnxName);
                 parcLog_Error(athena->log, "Unable to return Interest (%s) as InterestReturn (code: NoRoute).", name);
@@ -263,10 +265,11 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
             }
         } else {
             parcBitVector_SetVector(expectedReturnVector, egressVector);
-            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, egressVector);
-            if (result) { // remove failed channels - client will resend interest unless we wish to optimize here
-                parcBitVector_ClearVector(expectedReturnVector, result);
-                parcBitVector_Release(&result);
+            PARCBitVector *failedLinks =
+                athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, egressVector);
+
+            if (failedLinks) { // remove failed channels - client will resend interest unless we wish to optimize here
+                parcBitVector_Release(&failedLinks);
             }
         }
         parcBitVector_Release(&egressVector);
@@ -278,9 +281,11 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
 
             // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
             parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
-            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
+            PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
                                                                     ingressVector);
-            parcBitVector_Release(&result);
+            if (failedLinks != NULL) {
+                parcBitVector_Release(&failedLinks);
+            }
         } else {
             const char *name = ccnxName_ToString(ccnxName);
             parcLog_Error(athena->log, "Unable to return Interest (%s) as InterestReturn (code: NoRoute).", name);

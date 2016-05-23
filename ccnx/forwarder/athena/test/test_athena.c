@@ -64,10 +64,6 @@
 #include <errno.h>
 
 #include <parc/algol/parc_SafeMemory.h>
-#include <parc/security/parc_CryptoHasher.h>
-#include <ccnx/common/ccnx_WireFormatMessage.h>
-#include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
-#include <ccnx/common/validation/ccnxValidation_CRC32C.h>
 #include <ccnx/common/ccnx_NameSegmentNumber.h>
 #include <ccnx/common/internal/ccnx_InterestDefault.h>
 
@@ -104,6 +100,8 @@ LONGBOW_TEST_FIXTURE(Global)
     LONGBOW_RUN_TEST_CASE(Global, athena_ProcessControl);
     LONGBOW_RUN_TEST_CASE(Global, athena_ProcessInterestReturn);
     LONGBOW_RUN_TEST_CASE(Global, athena_ForwarderEngine);
+
+    LONGBOW_RUN_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX);
 }
 
 LONGBOW_TEST_FIXTURE_SETUP(Global)
@@ -285,6 +283,48 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl)
     athena_Release(&athena);
 }
 
+LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
+{
+    PARCURI *connectionURI;
+    Athena *athena = athena_Create(100);
+
+    CCNxName *name = ccnxName_CreateFromCString("ccnx:/foo/bar");
+    CCNxControl *control = ccnxControl_CreateAddRouteToSelfRequest(name);
+    CCNxMetaMessage *message = ccnxMetaMessage_CreateFromControl(control);
+    ccnxName_Release(&name);
+    ccnxControl_Release(&control);
+
+    connectionURI = parcURI_Parse("tcp://localhost:50100/listener/name=TCPListener");
+    const char *result = athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp://localhost:50100/name=TCP_0");
+    result = athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    int linkId = athenaTransportLinkAdapter_LinkNameToId(athena->athenaTransportLinkAdapter, "TCP_0");
+    PARCBitVector *ingressVector = parcBitVector_Create();
+    parcBitVector_Set(ingressVector, linkId);
+
+    athena_ProcessMessage(athena, message, ingressVector);
+    ccnxMetaMessage_Release(&message);
+
+    // KEV: _ProcessMessage() should have resulted in an CPI_ACK message being sent back.
+    // How do I read that back? I tried calling athenaTransportLinkAdapter_Receive() here, but
+    // never received anything.
+    PARCBitVector *v = NULL;
+    usleep(1000);
+    CCNxMetaMessage *ack = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &v, -1);
+    assertNotNull(ack, "Expected a CPI_ACK message back");
+
+    parcBitVector_Release(&ingressVector);
+
+    athena_Release(&athena);
+}
+
+
 LONGBOW_TEST_CASE(Global, athena_ProcessInterestReturn)
 {
     PARCURI *connectionURI;
@@ -366,14 +406,14 @@ LONGBOW_TEST_CASE(Global, athena_ForwarderEngine)
 
     athena_EncodeMessage(interest);
 
-    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "Exit message not sent");
+    PARCBitVector
+        *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&interest);
     parcBitVector_Release(&linkVector);
-    parcBitVector_Release(&resultVector);
 
-    CCNxMetaMessage *response = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &resultVector, -1);
+    CCNxMetaMessage
+        *response = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &resultVector, -1);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, "athenaTransportLinkAdapter_Receive failed");
     parcBitVector_Release(&resultVector);
