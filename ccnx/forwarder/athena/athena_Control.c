@@ -132,7 +132,7 @@ athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVector
             // Now send an ACK for the control message back to the sender.
 
             PARCJSON *json = ccnxControl_GetJson(control);
-            //parcJSON_AddBoolean(json, "commandResult", commandResult);
+            parcJSON_AddBoolean(json, "RESULT", commandResult);
 
             PARCJSON *jsonAck = cpiAcks_CreateAck(json);
 

@@ -294,15 +294,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     athena_EncodeMessage(ccnxMetaMessage);
     PARCBitVector *resultVector;
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
 
     // Send the message a second time
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
     // Allow a context switch for the sends to complete
@@ -342,7 +338,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     athena_EncodeMessage(ccnxMetaMessage);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
 
     parcBuffer_Release(&payload);
     parcBitVector_Release(&sendVector);
@@ -436,11 +432,10 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     athena_EncodeMessage(ccnxMetaMessage);
 
     PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
 
     parcBuffer_Release(&payload);
     parcBitVector_Release(&sendVector);
-    parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
     size_t iterations = (largePayloadSize / mtu) + 5;

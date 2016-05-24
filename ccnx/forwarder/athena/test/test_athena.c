@@ -289,10 +289,14 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
     Athena *athena = athena_Create(100);
 
     CCNxName *name = ccnxName_CreateFromCString("ccnx:/foo/bar");
-    CCNxControl *control = ccnxControl_CreateAddRouteToSelfRequest(name);
-    CCNxMetaMessage *message = ccnxMetaMessage_CreateFromControl(control);
-    ccnxName_Release(&name);
+    CCNxControl *control = ccnxControl_CreateAddRouteToSelfRequest(name); // CPI_REGISTER_PREFIX
+    CCNxMetaMessage *registerPrefixCommand = ccnxMetaMessage_CreateFromControl(control);
     ccnxControl_Release(&control);
+
+    control = ccnxControl_CreateRemoveRouteToSelfRequest(name); // CPI_UNREGISTER_PREFIX
+    CCNxMetaMessage *unregisterPrefixCommand = ccnxMetaMessage_CreateFromControl(control);
+    ccnxControl_Release(&control);
+    ccnxName_Release(&name);
 
     connectionURI = parcURI_Parse("tcp://localhost:50100/listener/name=TCPListener");
     const char *result = athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, connectionURI);
@@ -308,19 +312,37 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
     PARCBitVector *ingressVector = parcBitVector_Create();
     parcBitVector_Set(ingressVector, linkId);
 
-    athena_ProcessMessage(athena, message, ingressVector);
-    ccnxMetaMessage_Release(&message);
+    // Call _Receive() once to prime the link. Messages are dropped until _Receive() is called once.
+    PARCBitVector *linksRead = NULL;
+    CCNxMetaMessage *msg = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &linksRead, -1);
+    if (msg) {
+        ccnxMetaMessage_Release(&msg);
+    }
 
-    // KEV: _ProcessMessage() should have resulted in an CPI_ACK message being sent back.
-    // How do I read that back? I tried calling athenaTransportLinkAdapter_Receive() here, but
-    // never received anything.
-    PARCBitVector *v = NULL;
-    usleep(1000);
-    CCNxMetaMessage *ack = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &v, -1);
-    assertNotNull(ack, "Expected a CPI_ACK message back");
+    CCNxMetaMessage *cpiMessages[2];
+    cpiMessages[0] = registerPrefixCommand;    // CPI_REGISTER_PREFIX
+    cpiMessages[1] = unregisterPrefixCommand;  // CPI_UNREGISTER_PREFIX
 
+    for (int i = 0; i < 2; i++) {
+        CCNxMetaMessage *cpiMessageToSend = cpiMessages[i];
+        athena_ProcessMessage(athena, cpiMessageToSend, ingressVector);
+        ccnxMetaMessage_Release(&cpiMessageToSend);
+
+        usleep(1000);
+        CCNxMetaMessage *ack = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &linksRead, -1);
+        assertNotNull(ack, "Expected a CPI_ACK message back");
+        assertTrue(ccnxMetaMessage_IsControl(ack), "Expected a control message back");
+        parcBitVector_Release(&linksRead);
+
+        PARCJSON *json = ccnxControl_GetJson(ack);
+        const PARCJSONValue *cpiAckResult = parcJSON_GetByPath(json, "CPI_ACK/REQUEST/RESULT");
+        bool commandResult = parcJSONValue_GetBoolean(cpiAckResult);
+        assertTrue(commandResult, "Expected the ACK to contain RESULT=true");
+
+        ccnxMetaMessage_Release(&ack);
+    }
+    
     parcBitVector_Release(&ingressVector);
-
     athena_Release(&athena);
 }
 
