@@ -146,6 +146,7 @@ athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVector
 
             if (result) { // failed channels - client will resend interest unless we wish to optimize things here
                 parcBitVector_Release(&result);
+                parcLog_Warning(athena->log, "Unable to send ACK response via interface %d", interface);
             }
             ccnxControl_Release(&response);
             cpiRouteEntry_Destroy(&cpiRouteEntry);
