@@ -101,10 +101,10 @@ _usage()
 }
 
 static struct option options[] = {
-    { .name = "store",     .has_arg = optional_argument, .flag = NULL, .val = 's' },
-    { .name = "connect",   .has_arg = optional_argument, .flag = NULL, .val = 'c' },
+    { .name = "store",     .has_arg = required_argument, .flag = NULL, .val = 's' },
+    { .name = "connect",   .has_arg = required_argument, .flag = NULL, .val = 'c' },
     { .name = "config",    .has_arg = required_argument, .flag = NULL, .val = 'i' },
-    { .name = "statefile", .has_arg = optional_argument, .flag = NULL, .val = 'o' },
+    { .name = "statefile", .has_arg = required_argument, .flag = NULL, .val = 'o' },
     { .name = "help",      .has_arg = no_argument,       .flag = NULL, .val = 'h' },
     { .name = "version",   .has_arg = no_argument,       .flag = NULL, .val = 'v' },
     { .name = "debug",     .has_arg = no_argument,       .flag = NULL, .val = 'd' },
