@@ -273,6 +273,7 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
                 athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, egressVector);
 
             if (failedLinks) { // remove failed channels - client will resend interest unless we wish to optimize here
+                parcBitVector_ClearVector(expectedReturnVector, failedLinks);
                 parcBitVector_Release(&failedLinks);
             }
         }

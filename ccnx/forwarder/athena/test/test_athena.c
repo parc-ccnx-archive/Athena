@@ -329,9 +329,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
     // Call _Receive() once to prime the link. Messages are dropped until _Receive() is called once.
     PARCBitVector *linksRead = NULL;
     CCNxMetaMessage *msg = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &linksRead, -1);
-    if (msg) {
-        ccnxMetaMessage_Release(&msg);
-    }
+    assertNull(msg, "Expected to NOT receive a message after the first call to _Receive()");
 
     CCNxMetaMessage *cpiMessages[2];
     cpiMessages[0] = registerPrefixCommand;    // CPI_REGISTER_PREFIX
@@ -342,7 +340,6 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
         athena_ProcessMessage(athena, cpiMessageToSend, ingressVector);
         ccnxMetaMessage_Release(&cpiMessageToSend);
 
-        usleep(1000);
         CCNxMetaMessage *ack = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &linksRead, -1);
         assertNotNull(ack, "Expected a CPI_ACK message back");
         assertTrue(ccnxMetaMessage_IsControl(ack), "Expected a control message back");

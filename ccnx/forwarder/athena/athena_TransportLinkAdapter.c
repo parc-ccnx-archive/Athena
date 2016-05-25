@@ -853,12 +853,13 @@ athenaTransportLinkAdapter_Send(AthenaTransportLinkAdapter *athenaTransportLinkA
                                 CCNxMetaMessage *ccnxMetaMessage,
                                 PARCBitVector *linkOutputVector)
 {
-    PARCBitVector *resultVector = parcBitVector_Create();
     int nextLinkToWrite = 0;
 
     if (athenaTransportLinkAdapter->instanceList == NULL) {
-        return resultVector;
+        return NULL;
     }
+
+    PARCBitVector *resultVector = parcBitVector_Create();
 
     while ((nextLinkToWrite = parcBitVector_NextBitSet(linkOutputVector, nextLinkToWrite)) >= 0) {
         athenaTransportLinkAdapter->stats.messageSend_Attempted++;
