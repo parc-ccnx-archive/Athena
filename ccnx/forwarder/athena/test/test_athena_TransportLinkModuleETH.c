@@ -426,7 +426,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 #ifdef __linux__
     size_t largePayloadSize = 0xffdd; // Maximum payload size
 #else // MacOS
-    size_t largePayloadSize = mtu * 4; // four is the maximum that MacOS will queue without a reader
+    size_t largePayloadSize = mtu * 3; // four is the maximum that MacOS will queue without a reader
 #endif
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);

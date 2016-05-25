@@ -352,7 +352,7 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
 
         ccnxMetaMessage_Release(&ack);
     }
-    
+
     parcBitVector_Release(&ingressVector);
     athena_Release(&athena);
 }
@@ -440,13 +440,13 @@ LONGBOW_TEST_CASE(Global, athena_ForwarderEngine)
     athena_EncodeMessage(interest);
 
     PARCBitVector
-        *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
+    *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
     assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&interest);
     parcBitVector_Release(&linkVector);
 
     CCNxMetaMessage
-        *response = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &resultVector, -1);
+    *response = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &resultVector, -1);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, "athenaTransportLinkAdapter_Receive failed");
     parcBitVector_Release(&resultVector);

@@ -250,11 +250,10 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
         if (parcBitVector_NumberOfBitsSet(egressVector) == 0) {
             if (ccnxWireFormatMessage_ConvertInterestToInterestReturn(interest,
                                                                       CCNxInterestReturn_ReturnCode_NoRoute)) {
-
                 // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
                 parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
-                PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
-                                                                        ingressVector);
+                PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter,
+                                                                             interest, ingressVector);
                 if (failedLinks != NULL) {
                     parcBitVector_Release(&failedLinks);
                 }
@@ -265,7 +264,7 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
                     parcMemory_Deallocate(&name);
                 } else {
                     parcLog_Error(athena->log, "Unable to return Interest () as InterestReturn (code: NoRoute).");
-               }
+                }
             }
         } else {
             parcBitVector_SetVector(expectedReturnVector, egressVector);
@@ -283,11 +282,10 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
 
         if (ccnxWireFormatMessage_ConvertInterestToInterestReturn(interest,
                                                                   CCNxInterestReturn_ReturnCode_NoRoute)) {
-
             // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
             parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
             PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
-                                                                    ingressVector);
+                                                                         ingressVector);
             if (failedLinks != NULL) {
                 parcBitVector_Release(&failedLinks);
             }
