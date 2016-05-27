@@ -200,15 +200,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTEMPLATE_SendReceive)
     athena_EncodeMessage(ccnxMetaMessage);
     PARCBitVector *resultVector;
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
 
     // Send the message a second time
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     parcBitVector_Release(&sendVector);
 
     ccnxMetaMessage_Release(&ccnxMetaMessage);

@@ -294,15 +294,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     athena_EncodeMessage(sendMessage);
     PARCBitVector *resultVector;
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
 
     // Send the message a second time
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) != 0, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&sendMessage);
 
     // Allow a context switch for the sends to complete
@@ -342,11 +338,12 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
     athena_EncodeMessage(sendMessage);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, 
+               "athenaTransportLinkAdapter_Send should have failed to send a large message");
+    parcBitVector_Release(&resultVector);
 
     parcBuffer_Release(&payload);
     parcBitVector_Release(&sendVector);
-    parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&sendMessage);
 
     // Close one end of the connection
@@ -429,7 +426,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 #ifdef __linux__
     size_t largePayloadSize = 0xffdd; // Maximum payload size
 #else // MacOS
-    size_t largePayloadSize = mtu * 4; // four is the maximum that MacOS will queue without a reader
+    size_t largePayloadSize = mtu * 3; // four is the maximum that MacOS will queue without a reader
 #endif
     char largePayload[largePayloadSize];
     PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
@@ -439,8 +436,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 
     // Send it out on ETH_1
     PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send should have fragmented and sent a large message");
 
     // Receive the reconstructed message, this may take some time, we discard the reflected message
     size_t iterations = (largePayloadSize / mtu) + 5;
@@ -464,7 +460,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     parcBitVector_Release(&resultVector);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "Expected to succesfully send message");
 
     // Receive the reconstructed message, discarding any reflections
     iterations = (largePayloadSize / mtu) + 5;

@@ -64,10 +64,6 @@
 #include <errno.h>
 
 #include <parc/algol/parc_SafeMemory.h>
-#include <parc/security/parc_CryptoHasher.h>
-#include <ccnx/common/ccnx_WireFormatMessage.h>
-#include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
-#include <ccnx/common/validation/ccnxValidation_CRC32C.h>
 #include <ccnx/common/ccnx_NameSegmentNumber.h>
 #include <ccnx/common/internal/ccnx_InterestDefault.h>
 
@@ -104,6 +100,8 @@ LONGBOW_TEST_FIXTURE(Global)
     LONGBOW_RUN_TEST_CASE(Global, athena_ProcessControl);
     LONGBOW_RUN_TEST_CASE(Global, athena_ProcessInterestReturn);
     LONGBOW_RUN_TEST_CASE(Global, athena_ForwarderEngine);
+
+    LONGBOW_RUN_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX);
 }
 
 LONGBOW_TEST_FIXTURE_SETUP(Global)
@@ -299,6 +297,67 @@ LONGBOW_TEST_CASE(Global, athena_ProcessControl)
     athena_Release(&athena);
 }
 
+LONGBOW_TEST_CASE(Global, athena_ProcessControl_CPI_REGISTER_PREFIX)
+{
+    PARCURI *connectionURI;
+    Athena *athena = athena_Create(100);
+
+    CCNxName *name = ccnxName_CreateFromCString("ccnx:/foo/bar");
+    CCNxControl *control = ccnxControl_CreateAddRouteToSelfRequest(name); // CPI_REGISTER_PREFIX
+    CCNxMetaMessage *registerPrefixCommand = ccnxMetaMessage_CreateFromControl(control);
+    ccnxControl_Release(&control);
+
+    control = ccnxControl_CreateRemoveRouteToSelfRequest(name); // CPI_UNREGISTER_PREFIX
+    CCNxMetaMessage *unregisterPrefixCommand = ccnxMetaMessage_CreateFromControl(control);
+    ccnxControl_Release(&control);
+    ccnxName_Release(&name);
+
+    connectionURI = parcURI_Parse("tcp://localhost:50100/listener/name=TCPListener");
+    const char *result = athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp://localhost:50100/name=TCP_0");
+    result = athenaTransportLinkAdapter_Open(athena->athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    int linkId = athenaTransportLinkAdapter_LinkNameToId(athena->athenaTransportLinkAdapter, "TCP_0");
+    PARCBitVector *ingressVector = parcBitVector_Create();
+    parcBitVector_Set(ingressVector, linkId);
+
+    // Call _Receive() once to prime the link. Messages are dropped until _Receive() is called once.
+    PARCBitVector *linksRead = NULL;
+    CCNxMetaMessage *msg = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &linksRead, -1);
+    assertNull(msg, "Expected to NOT receive a message after the first call to _Receive()");
+
+    CCNxMetaMessage *cpiMessages[2];
+    cpiMessages[0] = registerPrefixCommand;    // CPI_REGISTER_PREFIX
+    cpiMessages[1] = unregisterPrefixCommand;  // CPI_UNREGISTER_PREFIX
+
+    for (int i = 0; i < 2; i++) {
+        CCNxMetaMessage *cpiMessageToSend = cpiMessages[i];
+        athena_ProcessMessage(athena, cpiMessageToSend, ingressVector);
+        ccnxMetaMessage_Release(&cpiMessageToSend);
+
+        CCNxMetaMessage *ack = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &linksRead, -1);
+        assertNotNull(ack, "Expected a CPI_ACK message back");
+        assertTrue(ccnxMetaMessage_IsControl(ack), "Expected a control message back");
+        parcBitVector_Release(&linksRead);
+
+        PARCJSON *json = ccnxControl_GetJson(ack);
+        const PARCJSONValue *cpiAckResult = parcJSON_GetByPath(json, "CPI_ACK/REQUEST/RESULT");
+        bool commandResult = parcJSONValue_GetBoolean(cpiAckResult);
+        assertTrue(commandResult, "Expected the ACK to contain RESULT=true");
+
+        ccnxMetaMessage_Release(&ack);
+    }
+
+    parcBitVector_Release(&ingressVector);
+    athena_Release(&athena);
+}
+
+
 LONGBOW_TEST_CASE(Global, athena_ProcessInterestReturn)
 {
     PARCURI *connectionURI;
@@ -380,14 +439,14 @@ LONGBOW_TEST_CASE(Global, athena_ForwarderEngine)
 
     athena_EncodeMessage(interest);
 
-    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "Exit message not sent");
+    PARCBitVector
+    *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&interest);
     parcBitVector_Release(&linkVector);
-    parcBitVector_Release(&resultVector);
 
-    CCNxMetaMessage *response = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &resultVector, -1);
+    CCNxMetaMessage
+    *response = athenaTransportLinkAdapter_Receive(athena->athenaTransportLinkAdapter, &resultVector, -1);
     assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
     assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, "athenaTransportLinkAdapter_Receive failed");
     parcBitVector_Release(&resultVector);

@@ -334,9 +334,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkAdapter_SendReceive)
     athena_EncodeMessage(sendMessage);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, linkVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == parcBitVector_NumberOfBitsSet(linkVector), "athenaTransportLinkAdapter_Send failed to send to multiple links");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
 
     usleep(1000);
 
@@ -378,14 +376,14 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkAdapter_SendReceive)
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, linkVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have partially failed");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 2, "athenaTransportLinkAdapter_Send should have partially failed");
     parcBitVector_Release(&linkVector);
     parcBitVector_Release(&resultVector);
 
     linkVector = parcBitVector_Create();
     parcBitVector_Set(linkVector, 100);
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, linkVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send to unknown link");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send should have failed to send to unknown link");
     parcBitVector_Release(&resultVector);
     parcBitVector_Release(&linkVector);
     ccnxMetaMessage_Release(&sendMessage);
