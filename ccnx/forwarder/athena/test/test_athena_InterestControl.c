@@ -534,11 +534,9 @@ LONGBOW_TEST_CASE(Global, athenaInterestControl_Spawn)
     athena_EncodeMessage(interest);
 
     PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, linkVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "Exit message not sent");
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&interest);
     parcBitVector_Release(&linkVector);
-    parcBitVector_Release(&resultVector);
 
     //usleep(1000);
 

@@ -61,7 +61,6 @@
 
 #include <LongBow/unit-test.h>
 
-#include <errno.h>
 #include <pthread.h>
 
 #include <parc/algol/parc_SafeMemory.h>

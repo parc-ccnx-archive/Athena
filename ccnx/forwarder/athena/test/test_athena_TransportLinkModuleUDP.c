@@ -207,8 +207,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceive)
     athena_EncodeMessage(ccnxMetaMessage);
     PARCBitVector *resultVector;
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&ccnxMetaMessage);
 
     usleep(1000);
@@ -232,7 +231,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceive)
     athena_EncodeMessage(ccnxMetaMessage);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, "athenaTransportLinkAdapter_Send should have failed to send a large message");
 
     parcBuffer_Release(&payload);
     parcBitVector_Release(&sendVector);
@@ -297,11 +296,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     int linkId = athenaTransportLinkAdapter_LinkNameToId(athenaTransportLinkAdapter, "UDP_1");
     parcBitVector_Set(sendVector, linkId);
 
-    PARCBitVector *resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(resultVector, "athenaTransportLinkAdapter_Send failed");
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Send failed to send large message");
-    parcBitVector_Release(&resultVector);
+    PARCBitVector *resultVector;
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
+
+    usleep(1000);
 
     size_t iterations = (largePayloadSize / mtu) + 5; // Extra reads to allow some delivery latency
     do {
@@ -321,7 +320,9 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_SendReceiveFragments)
     parcBitVector_Release(&resultVector);
 
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, sendMessage, sendVector);
-    parcBitVector_Release(&resultVector);
+    if (resultVector != NULL) {
+        parcBitVector_Release(&resultVector);
+    }
 
     iterations = (largePayloadSize / mtu) + 5; // Extra reads to allow some delivery latency
     do {
@@ -389,7 +390,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_MTU)
     athena_EncodeMessage(ccnxMetaMessage);
     PARCBitVector *resultVector;
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 0, "athenaTransportLinkAdapter_Send should have failed");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) > 0, "athenaTransportLinkAdapter_Send should have failed");
     assertTrue(errno == EMSGSIZE, "athenaTransportLinkAdapter_Send should have failed with EMSGSIZE (%d): %s", errno, strerror(errno));
     parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&ccnxMetaMessage);
@@ -440,8 +441,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP_P2P)
     athena_EncodeMessage(ccnxMetaMessage);
     PARCBitVector *resultVector;
     resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
-    assertNotNull(resultVector, "athenaTransportLinkAdapter_Send failed");
-    parcBitVector_Release(&resultVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
     ccnxMetaMessage_Release(&ccnxMetaMessage);
     parcBitVector_Release(&sendVector);
 
