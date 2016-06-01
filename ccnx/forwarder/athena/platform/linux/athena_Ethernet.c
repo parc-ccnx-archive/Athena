@@ -81,11 +81,15 @@ typedef struct AthenaEthernet {
     uint16_t etherType;
     uint32_t mtu;
     PARCLog *log;
+    const char *ifname;
 } AthenaEthernet;
 
 static void
 _athenaEthernet_Destroy(AthenaEthernet **athenaEthernet)
 {
+    if ((*athenaEthernet)->ifname) {
+        parcMemory_Deallocate(&((*athenaEthernet)->ifname));
+    }
     close((*athenaEthernet)->fd);
 }
 
@@ -151,7 +155,15 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
     }
     athenaEthernet->mtu = if_mac.ifr_mtu;
 
+    athenaEthernet->ifname = parcMemory_StringDuplicate(interface, strlen(interface));
+
     return athenaEthernet;
+}
+
+const char *
+athenaEthernet_GetName(AthenaEthernet *athenaEthernet)
+{
+    return athenaEthernet->ifname;
 }
 
 uint32_t

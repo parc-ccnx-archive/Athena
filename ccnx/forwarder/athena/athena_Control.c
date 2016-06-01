@@ -86,10 +86,14 @@ athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVector
     //   -> ListPIT
     //   -> Unsolicited message on channel XXX
     //
+    bool commandResult = false;
 
-    switch (cpi_GetMessageOperation(control)) {
-        // Add FIB route
-        case CPI_REGISTER_PREFIX: {
+    CpiOperation operation = cpi_GetMessageOperation(control);
+    switch (operation) {
+        case CPI_REGISTER_PREFIX:         // Add FIB route
+            // Fall through
+        case CPI_UNREGISTER_PREFIX: {     // Remove FIB route
+
             PARCBitVector *egressVector = parcBitVector_Create();
 
             CPIRouteEntry *cpiRouteEntry = cpiForwarding_RouteFromControlMessage(control);
@@ -102,35 +106,58 @@ athenaControl(Athena *athena, CCNxControl *control, PARCBitVector *ingressVector
                 parcBitVector_Set(egressVector, linkId);
             }
 
-            if (prefix) {
-                const char *name = ccnxName_ToString(prefix);
+            char *prefixString = ccnxName_ToString(prefix);
+            unsigned interface = parcBitVector_NextBitSet(egressVector, 0);
+            if (operation == CPI_REGISTER_PREFIX) {
                 parcLog_Debug(athena->log, "Adding %s route to interface %d",
-                              name, parcBitVector_NextBitSet(egressVector, 0));
-                parcMemory_Deallocate(&name);
-            } else {
-                parcLog_Debug(athena->log, "Adding NULL route to interface %d",
-                              parcBitVector_NextBitSet(egressVector, 0));
+                              prefixString, interface);
+                commandResult = athenaFIB_AddRoute(athena->athenaFIB, prefix, egressVector);
+                if (!commandResult) {
+                    parcLog_Warning(athena->log, "Unable to add route %s to interface %d",
+                                    prefixString, interface);
+                }
+
+            } else { // Must be CPI_UNREGISTER_PREFIX
+                parcLog_Debug(athena->log, "Removing %s route from interface %d",
+                              prefixString, interface);
+                commandResult = athenaFIB_DeleteRoute(athena->athenaFIB, prefix, egressVector);
+                if (!commandResult) {
+                    parcLog_Warning(athena->log, "Unable to remove route %s from interface %d",
+                                    prefixString, interface);
+                }
             }
-            athenaFIB_AddRoute(athena->athenaFIB, prefix, egressVector);
+            parcMemory_Deallocate(&prefixString);
+            parcBitVector_Release(&egressVector);
+
+            // Now send an ACK for the control message back to the sender.
 
             PARCJSON *json = ccnxControl_GetJson(control);
+            parcJSON_AddBoolean(json, "RESULT", commandResult);
+
             PARCJSON *jsonAck = cpiAcks_CreateAck(json);
 
             CCNxControl *response = ccnxControl_CreateCPIRequest(jsonAck);
             parcJSON_Release(&jsonAck);
 
             athena_EncodeMessage(response);
-            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, response, ingressVector);
+
+            PARCBitVector *result =
+                athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, response, ingressVector);
+
             if (result) { // failed channels - client will resend interest unless we wish to optimize things here
                 parcBitVector_Release(&result);
+                parcLog_Warning(athena->log, "Unable to send ACK response via interface %d", interface);
             }
             ccnxControl_Release(&response);
+            cpiRouteEntry_Destroy(&cpiRouteEntry);
+
         } break;
+
         default:
             parcLog_Error(athena->log, "unknown operation %d", cpi_GetMessageOperation(control));
     }
 
-    return 0;
+    return commandResult == true? 0 : -1;
 }
 
 CCNxMetaMessage *

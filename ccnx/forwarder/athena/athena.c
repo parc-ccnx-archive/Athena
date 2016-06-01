@@ -250,12 +250,13 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
         if (parcBitVector_NumberOfBitsSet(egressVector) == 0) {
             if (ccnxWireFormatMessage_ConvertInterestToInterestReturn(interest,
                                                                       CCNxInterestReturn_ReturnCode_NoRoute)) {
-
                 // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
                 parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
-                PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
-                                                                        ingressVector);
-                parcBitVector_Release(&result);
+                PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter,
+                                                                             interest, ingressVector);
+                if (failedLinks != NULL) {
+                    parcBitVector_Release(&failedLinks);
+                }
             } else {
                 if (ccnxName) {
                     const char *name = ccnxName_ToString(ccnxName);
@@ -263,14 +264,16 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
                     parcMemory_Deallocate(&name);
                 } else {
                     parcLog_Error(athena->log, "Unable to return Interest () as InterestReturn (code: NoRoute).");
-               }
+                }
             }
         } else {
             parcBitVector_SetVector(expectedReturnVector, egressVector);
-            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, egressVector);
-            if (result) { // remove failed channels - client will resend interest unless we wish to optimize here
-                parcBitVector_ClearVector(expectedReturnVector, result);
-                parcBitVector_Release(&result);
+            PARCBitVector *failedLinks =
+                athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest, egressVector);
+
+            if (failedLinks) { // remove failed channels - client will resend interest unless we wish to optimize here
+                parcBitVector_ClearVector(expectedReturnVector, failedLinks);
+                parcBitVector_Release(&failedLinks);
             }
         }
         parcBitVector_Release(&egressVector);
@@ -279,12 +282,13 @@ _processInterest(Athena *athena, CCNxInterest *interest, PARCBitVector *ingressV
 
         if (ccnxWireFormatMessage_ConvertInterestToInterestReturn(interest,
                                                                   CCNxInterestReturn_ReturnCode_NoRoute)) {
-
             // NOTE: The Interest has been modified in-place. It is now an InterestReturn.
             parcLog_Debug(athena->log, "Returning Interest as InterestReturn (code: NoRoute)");
-            PARCBitVector *result = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
-                                                                    ingressVector);
-            parcBitVector_Release(&result);
+            PARCBitVector *failedLinks = athenaTransportLinkAdapter_Send(athena->athenaTransportLinkAdapter, interest,
+                                                                         ingressVector);
+            if (failedLinks != NULL) {
+                parcBitVector_Release(&failedLinks);
+            }
         } else {
             if (ccnxName) {
                 const char *name = ccnxName_ToString(ccnxName);
