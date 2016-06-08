@@ -78,6 +78,9 @@
 
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 
+#define UDP_SCHEME "udp"
+#define UDP6_SCHEME "udp6"
+
 //
 // Platform support required for managing SIGPIPE.
 //
@@ -97,10 +100,8 @@
 // Private data for each link connection
 //
 typedef struct _connectionPair {
-    struct sockaddr_in myAddress;
-    socklen_t myAddressLength;
-    struct sockaddr_in peerAddress;
-    socklen_t peerAddressLength;
+    struct sockaddr_storage myAddress;
+    struct sockaddr_storage peerAddress;
     size_t mtu;
 } _connectionPair;
 
@@ -175,22 +176,38 @@ static const char *
 _createNameFromLinkData(const _connectionPair *linkData)
 {
     char nameBuffer[MAXPATHLEN];
-    const char *protocol = "udp";
+    const char *protocol;
 
     // Get our local hostname and port
     char myHost[NI_MAXHOST], myPort[NI_MAXSERV];
-    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, linkData->myAddressLength,
+    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, linkData->myAddress.ss_len,
                                myHost, NI_MAXHOST, myPort, NI_MAXSERV, NI_NUMERICSERV);
 
     // Get our peer's hostname and port
     char peerHost[NI_MAXHOST], peerPort[NI_MAXSERV];
-    int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, linkData->peerAddressLength,
-                                 peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
+    int peerResult = 0;
+    peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, linkData->peerAddress.ss_len,
+                             peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
 
+    protocol = (linkData->myAddress.ss_family == AF_INET6) ? UDP6_SCHEME : UDP_SCHEME;
     if ((peerResult == 0) && (myResult == 0)) { // point to point connection
-        sprintf(nameBuffer, "%s://%s:%s<->%s:%s", protocol, myHost, myPort, peerHost, peerPort);
+        if (strchr(myHost, ':')) {
+            if (strchr(peerHost, ':')) {
+                sprintf(nameBuffer, "%s://[%s]:%s<->[%s]:%s", protocol, myHost, myPort, peerHost, peerPort);
+            } else {
+                sprintf(nameBuffer, "%s://[%s]:%s<->%s:%s", protocol, myHost, myPort, peerHost, peerPort);
+            }
+        } else if (strchr(peerHost, ':')) {
+            sprintf(nameBuffer, "%s://%s:%s<->[%s]:%s", protocol, myHost, myPort, peerHost, peerPort);
+        } else {
+            sprintf(nameBuffer, "%s://%s:%s<->%s:%s", protocol, myHost, myPort, peerHost, peerPort);
+        }
     } else if (myResult == 0) { // listener only
-        sprintf(nameBuffer, "%s://%s:%s", protocol, myHost, myPort);
+        if (strchr(myHost, ':')) {
+            sprintf(nameBuffer, "%s://[%s]:%s", protocol, myHost, myPort);
+        } else {
+            sprintf(nameBuffer, "%s://%s:%s", protocol, myHost, myPort);
+        }
     } else { // some unknown possibility
         sprintf(nameBuffer, "%s://Unknown", protocol);
     }
@@ -228,10 +245,10 @@ _sendBuffer(AthenaTransportLink *athenaTransportLink, PARCBuffer *wireFormatBuff
     ssize_t writeCount = 0;
 #ifdef LINUX_IGNORESIGPIPE
     writeCount = sendto(linkData->fd, buffer, length, MSG_NOSIGNAL,
-                        (struct sockaddr *) &linkData->link.peerAddress, linkData->link.peerAddressLength);
+                        (struct sockaddr *)&linkData->link.peerAddress, linkData->link.peerAddress.ss_len);
 #else
     writeCount = sendto(linkData->fd, buffer, length, 0,
-                        (struct sockaddr *) &linkData->link.peerAddress, linkData->link.peerAddressLength);
+                        (struct sockaddr *)&linkData->link.peerAddress, linkData->link.peerAddress.ss_len);
 #endif
 
     // on error close the link, else return to retry a zero write
@@ -359,14 +376,18 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _UDPLinkData *lin
     // Messages without sufficient hop count collateral will be dropped.
     // Local links will always be allowed to be taken (i.e. localhost).
     bool isLocal = false;
-    if (linkData->link.peerAddress.sin_addr.s_addr == linkData->link.myAddress.sin_addr.s_addr) { // a local connection
-        isLocal = true;
+    if (linkData->link.peerAddress.ss_family == AF_INET) {
+        if (((struct sockaddr_in *)&linkData->link.peerAddress)->sin_addr.s_addr ==
+            ((struct sockaddr_in *)&linkData->link.myAddress)->sin_addr.s_addr)
+            isLocal = true;
+    } else if (linkData->link.peerAddress.ss_family == AF_INET6) {
+        // XXX
     }
     athenaTransportLink_SetLocal(athenaTransportLink, isLocal);
 }
 
 static AthenaTransportLink *
-_cloneNewLink(AthenaTransportLink *athenaTransportLink, struct sockaddr_in *peerAddress, socklen_t peerAddressLength)
+_cloneNewLink(AthenaTransportLink *athenaTransportLink, struct sockaddr_storage *peerAddress)
 {
     struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
     _UDPLinkData *newLinkData = _UDPLinkData_Create();
@@ -389,11 +410,9 @@ _cloneNewLink(AthenaTransportLink *athenaTransportLink, struct sockaddr_in *peer
     newLinkData->queue = parcDeque_Create();
     assertNotNull(newLinkData->queue, "Could not create data queue for new link");
 
-    newLinkData->link.myAddressLength = linkData->link.myAddressLength;
-    memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, linkData->link.myAddressLength);
+    memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, linkData->link.myAddress.ss_len);
 
-    newLinkData->link.peerAddressLength = peerAddressLength;
-    memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddressLength);
+    memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddress->ss_len);
 
     // Clone a new link from the current listener.
     const char *derivedLinkName = _createNameFromLinkData(&newLinkData->link);
@@ -443,14 +462,25 @@ _queueMessage(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMet
     athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Receive);
 }
 
+// XXX -- fix for IPv6 addresses
 static unsigned long
-_hashAddress(struct sockaddr_in *address)
+_hashAddress(struct sockaddr_storage *address)
 {
-    return ((unsigned long) address->sin_addr.s_addr << 32) | address->sin_port;
+    if (address->ss_family == AF_INET) {
+        return ((unsigned long) ((struct sockaddr_in *)address)->sin_addr.s_addr << 32) | ((struct sockaddr_in *)address)->sin_port;
+    } else if (address->ss_family == AF_INET6) {
+        // XXX
+        // ((sockaddr_in6 *)address)->sin6_addr.__u6_addr32[/*0-3*/]
+        // ((sockaddr_in6 *)address)->sin6_port
+    } else {
+        //assertTrue(0, "Unsupported address family %d\n", address->sa_family);
+printf("Unsupported address family %d\n", address->ss_family); return 1;
+    }
+    return 0;
 }
 
 static void
-_demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage, struct sockaddr_in *peerAddress, socklen_t peerAddressLength)
+_demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMetaMessage, struct sockaddr_storage *peerAddress)
 {
     struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
 
@@ -458,7 +488,7 @@ _demuxDelivery(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMe
 
     // If it's an unknown peer, try to create a new link
     if (demuxLink == NULL) {
-        demuxLink = _cloneNewLink(athenaTransportLink, peerAddress, peerAddressLength);
+        demuxLink = _cloneNewLink(athenaTransportLink, peerAddress);
         if (demuxLink) {
             parcHashCodeTable_Add(linkData->multiplexTable, (void *) _hashAddress(peerAddress), demuxLink);
         }
@@ -548,7 +578,7 @@ _messageLengthFromHeader(AthenaTransportLink *athenaTransportLink)
 // Receive a message from the specified link.
 //
 static CCNxMetaMessage *
-_UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in *peerAddress, socklen_t *peerAddressLength)
+_UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_storage *peerAddress)
 {
     struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(athenaTransportLink);
     CCNxMetaMessage *ccnxMetaMessage = NULL;
@@ -569,8 +599,8 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
     PARCBuffer *wireFormatBuffer = parcBuffer_Allocate(messageLength);
 
     char *buffer = parcBuffer_Overlay(wireFormatBuffer, 0);
-    *peerAddressLength = (socklen_t) sizeof(struct sockaddr_in);
-    ssize_t readCount = recvfrom(linkData->fd, buffer, messageLength, 0, (struct sockaddr *) peerAddress, peerAddressLength);
+    socklen_t peerAddressLength = sizeof(struct sockaddr_storage);
+    ssize_t readCount = recvfrom(linkData->fd, buffer, messageLength, 0, (struct sockaddr *) peerAddress, &peerAddressLength);
     // Reset to the real expected message length from the header if we didn't already obtain it
     if (linkData->link.mtu != 0) {
         messageLength = ccnxCodecTlvPacket_GetPacketLength(wireFormatBuffer);
@@ -635,9 +665,8 @@ _UDPReceiveMessage(AthenaTransportLink *athenaTransportLink, struct sockaddr_in 
 static CCNxMetaMessage *
 _UDPReceive(AthenaTransportLink *athenaTransportLink)
 {
-    struct sockaddr_in peerAddress; // Unused
-    socklen_t peerAddressLength; // Unused
-    CCNxMetaMessage *ccnxMetaMessage = _UDPReceiveMessage(athenaTransportLink, &peerAddress, &peerAddressLength);
+    struct sockaddr_storage peerAddress; // Unused
+    CCNxMetaMessage *ccnxMetaMessage = _UDPReceiveMessage(athenaTransportLink, &peerAddress);
     return ccnxMetaMessage;
 }
 
@@ -647,11 +676,10 @@ _UDPReceive(AthenaTransportLink *athenaTransportLink)
 static CCNxMetaMessage *
 _UDPReceiveListener(AthenaTransportLink *athenaTransportLink)
 {
-    struct sockaddr_in peerAddress;
-    socklen_t peerAddressLength;
-    CCNxMetaMessage *ccnxMetaMessage = _UDPReceiveMessage(athenaTransportLink, &peerAddress, &peerAddressLength);
+    struct sockaddr_storage peerAddress;
+    CCNxMetaMessage *ccnxMetaMessage = _UDPReceiveMessage(athenaTransportLink, &peerAddress);
     if (ccnxMetaMessage) {
-        _demuxDelivery(athenaTransportLink, ccnxMetaMessage, &peerAddress, peerAddressLength);
+        _demuxDelivery(athenaTransportLink, ccnxMetaMessage, &peerAddress);
     }
     return NULL;
 }
@@ -675,19 +703,19 @@ _setSocketOptions(AthenaTransportLinkModule *athenaTransportLinkModule, int fd)
 // Open a UDP point to point connection.
 //
 static AthenaTransportLink *
-_UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr_in *source, struct sockaddr_in *destination, size_t mtu)
+_UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr *source, struct sockaddr *destination, size_t mtu)
 {
     const char *derivedLinkName;
 
     _UDPLinkData *linkData = _UDPLinkData_Create();
 
-    linkData->link.peerAddress = *((struct sockaddr_in *) destination);
-    linkData->link.peerAddressLength = sizeof(struct sockaddr_in);
+    assertTrue(destination->sa_len != 0, "Empty address structure");
+    memcpy(&linkData->link.peerAddress, destination, destination->sa_len);
     if (mtu) {
         linkData->link.mtu = mtu;
     }
 
-    linkData->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    linkData->fd = socket(linkData->link.peerAddress.ss_family, SOCK_DGRAM, IPPROTO_UDP);
     if (linkData->fd < 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "socket error (%s)", strerror(errno));
         _UDPLinkData_Destroy(&linkData);
@@ -702,24 +730,30 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
     }
 
     // bind the local endpoint so we can know our allocated port if it was wildcarded
-    result = bind(linkData->fd, (struct sockaddr *) source, sizeof(struct sockaddr_in));
-    if (result) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "bind error (%s)", strerror(errno));
-        close(linkData->fd);
-        _UDPLinkData_Destroy(&linkData);
-        return NULL;
+    if (source) {
+        result = bind(linkData->fd, (struct sockaddr *) source, source->sa_len);
+        if (result) {
+            parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                          "bind error (%s)", strerror(errno));
+            close(linkData->fd);
+            _UDPLinkData_Destroy(&linkData);
+            return NULL;
+        }
+        assertTrue(source->sa_len != 0, "Empty address structure");
+        memcpy(&linkData->link.myAddress, source, source->sa_len);
     }
 
     // Retrieve the local endpoint data, used to create the derived name.
-    linkData->link.myAddressLength = sizeof(struct sockaddr_in);
-    result = getsockname(linkData->fd, (struct sockaddr *) &linkData->link.myAddress, &linkData->link.myAddressLength);
+    char myAddress[1024];
+    socklen_t myAddressLength = 1024;
+    result = getsockname(linkData->fd, (struct sockaddr *) &myAddress, &myAddressLength);
     if (result != 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Failed to obtain endpoint information from getsockname.");
         _UDPLinkData_Destroy(&linkData);
         return NULL;
     }
+    memcpy(&linkData->link.myAddress, myAddress, myAddressLength);
 
     derivedLinkName = _createNameFromLinkData(&linkData->link);
 
@@ -749,7 +783,6 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
 
     parcMemory_Deallocate(&derivedLinkName);
     return athenaTransportLink;
-    return NULL;
 }
 
 static bool
@@ -776,7 +809,7 @@ _closeConnection(void **link)
 // Listeners are inherently insecure, as an adversary could easily create many connections that are never closed.
 //
 static AthenaTransportLink *
-_UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr_in *destination, size_t mtu)
+_UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr *destination, size_t mtu)
 {
     const char *derivedLinkName;
 
@@ -784,13 +817,13 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     linkData->multiplexTable = parcHashCodeTable_Create(_connectionEquals, _connectionHashCode, NULL, _closeConnection);
     assertNotNull(linkData->multiplexTable, "Could not create multiplex table for new listener");
 
-    linkData->link.myAddress = *destination;
-    linkData->link.myAddressLength = sizeof(struct sockaddr_in);
+    assertTrue(destination->sa_len != 0, "Empty address structure");
+    memcpy(&linkData->link.myAddress, destination, destination->sa_len);
     if (mtu) {
         linkData->link.mtu = mtu;
     }
 
-    linkData->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    linkData->fd = socket(linkData->link.myAddress.ss_family, SOCK_DGRAM, IPPROTO_UDP);
     if (linkData->fd < 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "socket error (%s)", strerror(errno));
@@ -824,7 +857,7 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     }
 
     // bind to listen on requested address
-    result = bind(linkData->fd, (struct sockaddr *) &linkData->link.myAddress, linkData->link.myAddressLength);
+    result = bind(linkData->fd, (struct sockaddr *)&linkData->link.myAddress, linkData->link.myAddress.ss_len);
     if (result) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "bind error (%s)", strerror(errno));
@@ -875,112 +908,124 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 #define LOCAL_LINK_FLAG "local%3D"
 #define FRAGMENTER "fragmenter%3D"
 
-static int
-_parseFragmenterName(const char *token, char *name)
+typedef struct _URISpecificationParameters {
+    char *linkName;
+    char *address;
+    in_port_t port;
+    char *srcAddress;
+    uint16_t srcPort;
+    bool listener;
+    size_t mtu;
+    int forceLocal;
+    char *fragmenterName;
+} _URISpecificationParameters;
+
+static _URISpecificationParameters *
+_URISpecificationParameters_Create()
 {
-    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
-        return -1;
-    }
-    return 0;
+    _URISpecificationParameters *parameters = parcMemory_AllocateAndClear(sizeof(_URISpecificationParameters));
+
+    return parameters;
 }
 
-
-static int
-_parseLinkName(const char *token, char *name)
+static void
+_URISpecificationParameters_Destroy(_URISpecificationParameters **parameters)
 {
-    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
-        return -1;
+    if ((*parameters)->fragmenterName) {
+        parcMemory_Deallocate(&((*parameters)->fragmenterName));
     }
-    return 0;
+    if ((*parameters)->linkName) {
+        parcMemory_Deallocate(&((*parameters)->linkName));
+    }
+    if ((*parameters)->srcAddress) {
+        parcMemory_Deallocate(&((*parameters)->srcAddress));
+    }
+    if ((*parameters)->address) {
+        parcMemory_Deallocate(&((*parameters)->address));
+    }
+    parcMemory_Deallocate(parameters);
 }
 
-static int
-_parseLocalFlag(const char *token)
+static char *
+_getAddress(const char *moduleName, const char *hostname)
 {
-    int forceLocal = 0;
-    char localFlag[MAXPATHLEN] = { 0 };
-    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
-        return 0;
-    }
-    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
-        forceLocal = AthenaTransportLink_ForcedNonLocal;
-    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
-        forceLocal = AthenaTransportLink_ForcedLocal;
-    }
-    return forceLocal;
-}
+    if (strcmp(moduleName, UDP_SCHEME) == 0) {
+        // Convert given hostname to a cononical presentation
+        char address[INET_ADDRSTRLEN];
+        struct addrinfo hints = { .ai_family = AF_INET };
+        struct addrinfo *ai;
 
-static size_t
-_parseMTU(const char *token, size_t *mtu)
-{
-    if (sscanf(token, "%*[^%%]%%3D%zd", mtu) != 1) {
-        return -1;
-    }
-    return *mtu;
-}
+        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
+            inet_ntop(AF_INET, (void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr, address, INET_ADDRSTRLEN);
+            freeaddrinfo(ai);
+            return parcMemory_StringDuplicate(address, strlen(address));
+        }
+    } else if (strcmp(moduleName, UDP6_SCHEME) == 0) {
+        // Convert given hostname to a cononical presentation
+        char address[INET6_ADDRSTRLEN];
+        struct addrinfo hints = { .ai_family = AF_INET6 };
+        struct addrinfo *ai;
 
-static int
-_parseSrc(const char *token, char *srcAddress, uint16_t *srcPort)
-{
-    if (sscanf(token, "%*[^%%]%%3D%[^%%]%%3A%hd", srcAddress, srcPort) != 2) {
-        return -1;
+        if (hostname[0] == '[') {
+            hostname = parcMemory_StringDuplicate(hostname + 1, strlen(hostname) - 2);
+        } else {
+            hostname = parcMemory_StringDuplicate(hostname, strlen(hostname));
+        }
+        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
+            inet_ntop(AF_INET6, (void *)&((struct sockaddr_in6 *)ai->ai_addr)->sin6_addr, address, INET6_ADDRSTRLEN);
+            freeaddrinfo(ai);
+            parcMemory_Deallocate(&hostname);
+            return parcMemory_StringDuplicate(address, strlen(address));
+        }
+        parcMemory_Deallocate(&hostname);
     }
-    // Normalize the provided hostname
-    struct sockaddr_in *addr = (struct sockaddr_in *) parcNetwork_SockAddress(srcAddress, *srcPort);
-    char *hostname = inet_ntoa(addr->sin_addr);
-    parcMemory_Deallocate(&addr);
 
-    memcpy(srcAddress, hostname, strlen(hostname) + 1);
-    return 0;
+    return NULL;
 }
 
 #include <parc/algol/parc_URIAuthority.h>
 
-static AthenaTransportLink *
-_UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
+static _URISpecificationParameters *
+_parseURISpecification(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
 {
-    AthenaTransportLink *result = 0;
+    const char *moduleName = parcURI_GetScheme(connectionURI);
+    _URISpecificationParameters *parameters = _URISpecificationParameters_Create();
 
     const char *authorityString = parcURI_GetAuthority(connectionURI);
     if (authorityString == NULL) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Unable to parse connection authority %s", authorityString);
         errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
         return NULL;
     }
     PARCURIAuthority *authority = parcURIAuthority_Parse(authorityString);
-    const char *URIAddress = parcURIAuthority_GetHostName(authority);
-    in_port_t port = parcURIAuthority_GetPort(authority);
-
-    // Normalize the provided hostname
-    struct sockaddr_in *addr = (struct sockaddr_in *) parcNetwork_SockAddress(URIAddress, port);
-    char *address = inet_ntoa(addr->sin_addr);
-    parcMemory_Deallocate(&addr);
-
-    parcURIAuthority_Release(&authority);
-
-    if (address == NULL) {
+    const char *hostname = parcURIAuthority_GetHostName(authority);
+    parameters->address = _getAddress(moduleName, hostname);
+    if (parameters->address == NULL) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to lookup hostname %s", address);
+                      "Unable to lookup hostname (%s)", hostname);
         errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
         return NULL;
     }
-    if (port == 0) {
+    parameters->port = parcURIAuthority_GetPort(authority);
+    parcURIAuthority_Release(&authority);
+
+    if (parameters->address == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to lookup hostname %s", parameters->address);
+        errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
+        return NULL;
+    }
+    if (parameters->port == 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Invalid address specification, port == 0");
         errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
         return NULL;
     }
-
-    bool listener = false;
-    char srcAddress[NI_MAXHOST] = "0.0.0.0";
-    size_t mtu = 0;
-    uint16_t srcPort = 0;
-    int forceLocal = 0;
-    char *linkName = NULL;
-    char specifiedLinkName[MAXPATHLEN] = { 0 };
-    char *fragmenterName = NULL;
-    char specifiedFragmenterName[MAXPATHLEN] = { 0 };
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
     size_t segments = parcURIPath_Count(remainder);
@@ -989,17 +1034,28 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         const char *token = parcURISegment_ToString(segment);
 
         if (strcasecmp(token, UDP_LISTENER_FLAG) == 0) {
-            listener = true;
+            parameters->listener = true;
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, SRC_LINK_SPECIFIER, strlen(SRC_LINK_SPECIFIER)) == 0) {
-            if (_parseSrc(token, srcAddress, &srcPort) != 0) {
+            char specifiedSrcAddress[MAXPATHLEN];
+            if (sscanf(token, "%*[^%%]%%3D%[^%%]%%3A%hd", specifiedSrcAddress, &parameters->srcPort) != 2) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection source specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
+                return NULL;
+            }
+            parameters->srcAddress = _getAddress(moduleName, specifiedSrcAddress);
+            if (parameters->address == NULL) {
+                parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                              "Unable to lookup hostname (%s)", hostname);
+                errno = EINVAL;
+                parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 return NULL;
             }
             parcMemory_Deallocate(&token);
@@ -1007,23 +1063,26 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         }
 
         if (strncasecmp(token, FRAGMENTER, strlen(FRAGMENTER)) == 0) {
-            if (_parseFragmenterName(token, specifiedFragmenterName) != 0) {
+            char specifiedFragmenterName[MAXPATHLEN];
+            if (sscanf(token, "%*[^%%]%%3D%s", specifiedFragmenterName) != 1) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper fragmenter name specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
                 return NULL;
             }
-            fragmenterName = specifiedFragmenterName;
+            parameters->fragmenterName = parcMemory_StringDuplicate(specifiedFragmenterName, strlen(specifiedFragmenterName));
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LINK_MTU_SIZE, strlen(LINK_MTU_SIZE)) == 0) {
-            if (_parseMTU(token, &mtu) == -1) {
+            if (sscanf(token, "%*[^%%]%%3D%zd", &parameters->mtu) != 1) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper MTU specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
                 return NULL;
             }
@@ -1032,24 +1091,37 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         }
 
         if (strncasecmp(token, LINK_NAME_SPECIFIER, strlen(LINK_NAME_SPECIFIER)) == 0) {
-            if (_parseLinkName(token, specifiedLinkName) != 0) {
+            char specifiedLinkName[MAXPATHLEN];
+            if (sscanf(token, "%*[^%%]%%3D%s", specifiedLinkName) != 1) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection name specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
                 return NULL;
             }
-            linkName = specifiedLinkName;
+            parameters->linkName = parcMemory_StringDuplicate(specifiedLinkName, strlen(specifiedLinkName));
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LOCAL_LINK_FLAG, strlen(LOCAL_LINK_FLAG)) == 0) {
-            forceLocal = _parseLocalFlag(token);
-            if (forceLocal == 0) {
+            char localFlag[MAXPATHLEN] = { 0 };
+            if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
+                parameters->forceLocal = 0;
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper local specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
+                errno = EINVAL;
+                return NULL;
+            } else if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
+                parameters->forceLocal = AthenaTransportLink_ForcedNonLocal;
+            } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
+                parameters->forceLocal = AthenaTransportLink_ForcedLocal;
+            } else {
+                parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
                 return NULL;
             }
@@ -1060,37 +1132,109 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Unknown connection parameter (%s)", token);
         parcMemory_Deallocate(&token);
+	_URISpecificationParameters_Destroy(&parameters);
         errno = EINVAL;
         return NULL;
     }
 
-    struct sockaddr_in *destination = parcNetwork_SockInet4Address(address, port);
-    struct sockaddr_in *source = parcNetwork_SockInet4Address(srcAddress, srcPort);
-
-    if (listener) {
-        result = _UDPOpenListener(athenaTransportLinkModule, linkName, destination, mtu);
-    } else {
-        result = _UDPOpenConnection(athenaTransportLinkModule, linkName, source, destination, mtu);
+    if (parameters && (parameters->srcAddress == NULL)) {
+        parameters->srcAddress = parcMemory_StringDuplicate("0.0.0.0", strlen("0.0.0.0"));
     }
 
-    parcMemory_Deallocate(&destination);
-    parcMemory_Deallocate(&source);
+    return parameters;
+}
 
-    if (result && fragmenterName) {
+static AthenaTransportLink *
+_UDPOpenCommon(AthenaTransportLinkModule *athenaTransportLinkModule, _URISpecificationParameters *parameters, struct sockaddr *destination, struct sockaddr *source)
+{
+    AthenaTransportLink *result = NULL;
+
+    if (parameters->listener) {
+        result = _UDPOpenListener(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)destination, parameters->mtu);
+    } else {
+        result = _UDPOpenConnection(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)source, (struct sockaddr *)destination, parameters->mtu);
+    }
+
+    if (result && parameters->fragmenterName) {
         struct _UDPLinkData *linkData = athenaTransportLink_GetPrivateData(result);
-        linkData->fragmenter = athenaFragmenter_Create(result, fragmenterName);
+        linkData->fragmenter = athenaFragmenter_Create(result, parameters->fragmenterName);
         if (linkData->fragmenter == NULL) {
             parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                          "Failed to open/initialize %s fragmenter for %s: %s", fragmenterName, linkName, strerror(errno));
+                          "Failed to open/initialize %s fragmenter for %s: %s", parameters->fragmenterName, parameters->linkName, strerror(errno));
             athenaTransportLink_Close(result);
+            parcMemory_Deallocate(&parameters);
             return NULL;
         }
     }
 
     // forced IsLocal/IsNotLocal, mainly for testing
-    if (result && forceLocal) {
-        athenaTransportLink_ForceLocal(result, forceLocal);
+    if (result && parameters->forceLocal) {
+        athenaTransportLink_ForceLocal(result, parameters->forceLocal);
     }
+
+    return result;
+}
+
+static AthenaTransportLink *
+_UDP6Open(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
+{
+    AthenaTransportLink *result = 0;
+
+    _URISpecificationParameters *parameters = _parseURISpecification(athenaTransportLinkModule, connectionURI);
+    if (parameters == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to parse connection URI specification (%s)", connectionURI);
+        errno = EINVAL;
+        return NULL;
+    }
+
+    struct sockaddr_in6 *destination = parcNetwork_SockInet6Address(parameters->address, parameters->port, 0, 1);
+    destination->sin6_len = sizeof(struct sockaddr_in6);
+    struct sockaddr_in6 *source = parcNetwork_SockInet6Address(parameters->srcAddress, parameters->srcPort, 0, 1);
+    if (source) {
+        source->sin6_len = sizeof(struct sockaddr_in6);
+    }
+
+    result = _UDPOpenCommon(athenaTransportLinkModule, parameters, (struct sockaddr *)destination, (struct sockaddr *)source);
+
+    parcMemory_Deallocate(&destination);
+    if (source) {
+        parcMemory_Deallocate(&source);
+    }
+
+    _URISpecificationParameters_Destroy(&parameters);
+
+    return result;
+}
+
+static AthenaTransportLink *
+_UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
+{
+    AthenaTransportLink *result = 0;
+
+    _URISpecificationParameters *parameters = _parseURISpecification(athenaTransportLinkModule, connectionURI);
+    if (parameters == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to parse connection URI specification (%s)", connectionURI);
+        errno = EINVAL;
+        return NULL;
+    }
+
+    struct sockaddr_in *destination = parcNetwork_SockInet4Address(parameters->address, parameters->port);
+    destination->sin_len = sizeof(struct sockaddr_in);
+    struct sockaddr_in *source = parcNetwork_SockInet4Address(parameters->address, parameters->srcPort);
+    if (source) {
+        source->sin_len = sizeof(struct sockaddr_in);
+    }
+
+    result = _UDPOpenCommon(athenaTransportLinkModule, parameters, (struct sockaddr *)destination, (struct sockaddr *)source);
+
+    parcMemory_Deallocate(&destination);
+    if (source) {
+        parcMemory_Deallocate(&source);
+    }
+
+    _URISpecificationParameters_Destroy(&parameters);
 
     return result;
 }
@@ -1121,10 +1265,28 @@ athenaTransportLinkModuleUDP_Init()
     bool result = parcArrayList_Add(moduleList, athenaTransportLinkModule);
     assertTrue(result == true, "parcArrayList_Add failed");
 
+    athenaTransportLinkModule = athenaTransportLinkModule_Create("UDP6",
+                                                                 _UDP6Open,
+                                                                 _UDPPoll);
+    assertNotNull(athenaTransportLinkModule, "parcMemory_AllocateAndClear failed allocate UDP athenaTransportLinkModule");
+    result = parcArrayList_Add(moduleList, athenaTransportLinkModule);
+    assertTrue(result == true, "parcArrayList_Add failed");
+
     return moduleList;
+}
+
+PARCArrayList *
+athenaTransportLinkModuleUDP6_Init()
+{
+    return athenaTransportLinkModuleUDP_Init();
 }
 
 void
 athenaTransportLinkModuleUDP_Fini()
+{
+}
+
+void
+athenaTransportLinkModuleUDP6_Fini()
 {
 }
