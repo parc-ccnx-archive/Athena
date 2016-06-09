@@ -462,19 +462,17 @@ _queueMessage(AthenaTransportLink *athenaTransportLink, CCNxMetaMessage *ccnxMet
     athenaTransportLink_SetEvent(athenaTransportLink, AthenaTransportLinkEvent_Receive);
 }
 
-// XXX -- fix for IPv6 addresses
 static unsigned long
 _hashAddress(struct sockaddr_storage *address)
 {
     if (address->ss_family == AF_INET) {
-        return ((unsigned long) ((struct sockaddr_in *)address)->sin_addr.s_addr << 32) | ((struct sockaddr_in *)address)->sin_port;
+        return ((unsigned long) ((struct sockaddr_in *)address)->sin_addr.s_addr << 32) |
+                                ((struct sockaddr_in *)address)->sin_port;
     } else if (address->ss_family == AF_INET6) {
-        // XXX
-        // ((sockaddr_in6 *)address)->sin6_addr.__u6_addr32[/*0-3*/]
-        // ((sockaddr_in6 *)address)->sin6_port
+        uint64_t sin6addrHash = parcHash64_Data(&((struct sockaddr_in6 *)address)->sin6_addr.__u6_addr.__u6_addr8, 16);
+        return parcHash64_Data_Cumulative(&((struct sockaddr_in6 *)address)->sin6_port, sizeof(in_port_t), sin6addrHash);
     } else {
-        //assertTrue(0, "Unsupported address family %d\n", address->sa_family);
-printf("Unsupported address family %d\n", address->ss_family); return 1;
+        assertTrue(0, "Unsupported address family %d\n", address->ss_family);
     }
     return 0;
 }
@@ -910,22 +908,57 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 
 typedef struct _URISpecificationParameters {
     char *linkName;
-    char *address;
-    in_port_t port;
-    char *srcAddress;
-    uint16_t srcPort;
+    struct sockaddr_storage *source;
+    struct sockaddr_storage *destination;
     bool listener;
     size_t mtu;
     int forceLocal;
     char *fragmenterName;
 } _URISpecificationParameters;
 
-static _URISpecificationParameters *
-_URISpecificationParameters_Create()
+static struct sockaddr_storage *
+_getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
 {
-    _URISpecificationParameters *parameters = parcMemory_AllocateAndClear(sizeof(_URISpecificationParameters));
+    struct sockaddr_storage *sockaddr = NULL;
 
-    return parameters;
+    if (strcmp(moduleName, UDP_SCHEME) == 0) {
+        char address[INET_ADDRSTRLEN];
+        struct addrinfo hints = { .ai_family = AF_INET };
+        struct addrinfo *ai;
+
+        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
+            // Convert given hostname to a canonical presentation
+            inet_ntop(AF_INET, (void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr, address, INET_ADDRSTRLEN);
+            freeaddrinfo(ai);
+            sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet4Address(address, port);
+            sockaddr->ss_len = sizeof(struct sockaddr_in);
+            return sockaddr;
+        }
+    } else if (strcmp(moduleName, UDP6_SCHEME) == 0) {
+        char address[INET6_ADDRSTRLEN];
+        struct addrinfo hints = { .ai_family = AF_INET6 };
+        struct addrinfo *ai;
+
+        if (hostname[0] == '[') {
+            hostname = parcMemory_StringDuplicate(hostname + 1, strlen(hostname) - 2);
+        } else {
+            hostname = parcMemory_StringDuplicate(hostname, strlen(hostname));
+        }
+        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
+            // Convert given hostname to a canonical presentation
+            inet_ntop(AF_INET6, (void *)&((struct sockaddr_in6 *)ai->ai_addr)->sin6_addr, address, INET6_ADDRSTRLEN);
+            freeaddrinfo(ai);
+            parcMemory_Deallocate(&hostname);
+            sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet6Address(address, port,
+                                                                               ((struct sockaddr_in6 *)ai->ai_addr)->sin6_flowinfo,
+                                                                               ((struct sockaddr_in6 *)ai->ai_addr)->sin6_scope_id);
+            sockaddr->ss_len = sizeof(struct sockaddr_in6);
+            return sockaddr;
+        }
+        parcMemory_Deallocate(&hostname);
+    }
+
+    return NULL;
 }
 
 static void
@@ -937,59 +970,22 @@ _URISpecificationParameters_Destroy(_URISpecificationParameters **parameters)
     if ((*parameters)->linkName) {
         parcMemory_Deallocate(&((*parameters)->linkName));
     }
-    if ((*parameters)->srcAddress) {
-        parcMemory_Deallocate(&((*parameters)->srcAddress));
+    if ((*parameters)->source) {
+        parcMemory_Deallocate(&((*parameters)->source));
     }
-    if ((*parameters)->address) {
-        parcMemory_Deallocate(&((*parameters)->address));
+    if ((*parameters)->destination) {
+        parcMemory_Deallocate(&((*parameters)->destination));
     }
     parcMemory_Deallocate(parameters);
-}
-
-static char *
-_getAddress(const char *moduleName, const char *hostname)
-{
-    if (strcmp(moduleName, UDP_SCHEME) == 0) {
-        // Convert given hostname to a cononical presentation
-        char address[INET_ADDRSTRLEN];
-        struct addrinfo hints = { .ai_family = AF_INET };
-        struct addrinfo *ai;
-
-        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
-            inet_ntop(AF_INET, (void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr, address, INET_ADDRSTRLEN);
-            freeaddrinfo(ai);
-            return parcMemory_StringDuplicate(address, strlen(address));
-        }
-    } else if (strcmp(moduleName, UDP6_SCHEME) == 0) {
-        // Convert given hostname to a cononical presentation
-        char address[INET6_ADDRSTRLEN];
-        struct addrinfo hints = { .ai_family = AF_INET6 };
-        struct addrinfo *ai;
-
-        if (hostname[0] == '[') {
-            hostname = parcMemory_StringDuplicate(hostname + 1, strlen(hostname) - 2);
-        } else {
-            hostname = parcMemory_StringDuplicate(hostname, strlen(hostname));
-        }
-        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
-            inet_ntop(AF_INET6, (void *)&((struct sockaddr_in6 *)ai->ai_addr)->sin6_addr, address, INET6_ADDRSTRLEN);
-            freeaddrinfo(ai);
-            parcMemory_Deallocate(&hostname);
-            return parcMemory_StringDuplicate(address, strlen(address));
-        }
-        parcMemory_Deallocate(&hostname);
-    }
-
-    return NULL;
 }
 
 #include <parc/algol/parc_URIAuthority.h>
 
 static _URISpecificationParameters *
-_parseURISpecification(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
+_URISpecificationParameters_Create(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
 {
     const char *moduleName = parcURI_GetScheme(connectionURI);
-    _URISpecificationParameters *parameters = _URISpecificationParameters_Create();
+    _URISpecificationParameters *parameters = parcMemory_AllocateAndClear(sizeof(_URISpecificationParameters));
 
     const char *authorityString = parcURI_GetAuthority(connectionURI);
     if (authorityString == NULL) {
@@ -1001,31 +997,26 @@ _parseURISpecification(AthenaTransportLinkModule *athenaTransportLinkModule, PAR
     }
     PARCURIAuthority *authority = parcURIAuthority_Parse(authorityString);
     const char *hostname = parcURIAuthority_GetHostName(authority);
-    parameters->address = _getAddress(moduleName, hostname);
-    if (parameters->address == NULL) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to lookup hostname (%s)", hostname);
-        errno = EINVAL;
-        _URISpecificationParameters_Destroy(&parameters);
-        return NULL;
-    }
-    parameters->port = parcURIAuthority_GetPort(authority);
-    parcURIAuthority_Release(&authority);
-
-    if (parameters->address == NULL) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to lookup hostname %s", parameters->address);
-        errno = EINVAL;
-        _URISpecificationParameters_Destroy(&parameters);
-        return NULL;
-    }
-    if (parameters->port == 0) {
+    in_port_t port = parcURIAuthority_GetPort(authority);
+    if (port == 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Invalid address specification, port == 0");
         errno = EINVAL;
         _URISpecificationParameters_Destroy(&parameters);
+        parcURIAuthority_Release(&authority);
         return NULL;
     }
+
+    parameters->destination = _getSockaddr(moduleName, hostname, port);
+    if (parameters->destination == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to create sockaddr for %s", hostname);
+        errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
+        parcURIAuthority_Release(&authority);
+        return NULL;
+    }
+    parcURIAuthority_Release(&authority);
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
     size_t segments = parcURIPath_Count(remainder);
@@ -1040,8 +1031,9 @@ _parseURISpecification(AthenaTransportLinkModule *athenaTransportLinkModule, PAR
         }
 
         if (strncasecmp(token, SRC_LINK_SPECIFIER, strlen(SRC_LINK_SPECIFIER)) == 0) {
-            char specifiedSrcAddress[MAXPATHLEN];
-            if (sscanf(token, "%*[^%%]%%3D%[^%%]%%3A%hd", specifiedSrcAddress, &parameters->srcPort) != 2) {
+            const char srcAddress[MAXPATHLEN];
+            in_port_t srcPort;
+            if (sscanf(token, "%*[^%%]%%3D%[^%%]%%3A%hd", (char *)srcAddress, &srcPort) != 2) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection source specification (%s)", token);
                 parcMemory_Deallocate(&token);
@@ -1049,10 +1041,10 @@ _parseURISpecification(AthenaTransportLinkModule *athenaTransportLinkModule, PAR
                 errno = EINVAL;
                 return NULL;
             }
-            parameters->srcAddress = _getAddress(moduleName, specifiedSrcAddress);
-            if (parameters->address == NULL) {
+            parameters->source = _getSockaddr(moduleName, srcAddress, srcPort);
+            if (parameters->source == NULL) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                              "Unable to lookup hostname (%s)", hostname);
+                              "Unable to create sockaddr for %s", hostname);
                 errno = EINVAL;
                 parcMemory_Deallocate(&token);
                 _URISpecificationParameters_Destroy(&parameters);
@@ -1137,22 +1129,29 @@ _parseURISpecification(AthenaTransportLinkModule *athenaTransportLinkModule, PAR
         return NULL;
     }
 
-    if (parameters && (parameters->srcAddress == NULL)) {
-        parameters->srcAddress = parcMemory_StringDuplicate("0.0.0.0", strlen("0.0.0.0"));
-    }
-
     return parameters;
 }
 
 static AthenaTransportLink *
-_UDPOpenCommon(AthenaTransportLinkModule *athenaTransportLinkModule, _URISpecificationParameters *parameters, struct sockaddr *destination, struct sockaddr *source)
+_UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
 {
-    AthenaTransportLink *result = NULL;
+    AthenaTransportLink *result = 0;
+
+    _URISpecificationParameters *parameters = _URISpecificationParameters_Create(athenaTransportLinkModule, connectionURI);
+    if (parameters == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to parse connection URI specification (%s)", connectionURI);
+        errno = EINVAL;
+        return NULL;
+    }
 
     if (parameters->listener) {
-        result = _UDPOpenListener(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)destination, parameters->mtu);
+        result = _UDPOpenListener(athenaTransportLinkModule, parameters->linkName,
+                                  (struct sockaddr *)parameters->destination, parameters->mtu);
     } else {
-        result = _UDPOpenConnection(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)source, (struct sockaddr *)destination, parameters->mtu);
+        result = _UDPOpenConnection(athenaTransportLinkModule, parameters->linkName,
+                                  (struct sockaddr *)parameters->source,
+                                  (struct sockaddr *)parameters->destination, parameters->mtu);
     }
 
     if (result && parameters->fragmenterName) {
@@ -1162,7 +1161,7 @@ _UDPOpenCommon(AthenaTransportLinkModule *athenaTransportLinkModule, _URISpecifi
             parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                           "Failed to open/initialize %s fragmenter for %s: %s", parameters->fragmenterName, parameters->linkName, strerror(errno));
             athenaTransportLink_Close(result);
-            parcMemory_Deallocate(&parameters);
+            _URISpecificationParameters_Destroy(&parameters);
             return NULL;
         }
     }
@@ -1170,68 +1169,6 @@ _UDPOpenCommon(AthenaTransportLinkModule *athenaTransportLinkModule, _URISpecifi
     // forced IsLocal/IsNotLocal, mainly for testing
     if (result && parameters->forceLocal) {
         athenaTransportLink_ForceLocal(result, parameters->forceLocal);
-    }
-
-    return result;
-}
-
-static AthenaTransportLink *
-_UDP6Open(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
-{
-    AthenaTransportLink *result = 0;
-
-    _URISpecificationParameters *parameters = _parseURISpecification(athenaTransportLinkModule, connectionURI);
-    if (parameters == NULL) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to parse connection URI specification (%s)", connectionURI);
-        errno = EINVAL;
-        return NULL;
-    }
-
-    struct sockaddr_in6 *destination = parcNetwork_SockInet6Address(parameters->address, parameters->port, 0, 1);
-    destination->sin6_len = sizeof(struct sockaddr_in6);
-    struct sockaddr_in6 *source = parcNetwork_SockInet6Address(parameters->srcAddress, parameters->srcPort, 0, 1);
-    if (source) {
-        source->sin6_len = sizeof(struct sockaddr_in6);
-    }
-
-    result = _UDPOpenCommon(athenaTransportLinkModule, parameters, (struct sockaddr *)destination, (struct sockaddr *)source);
-
-    parcMemory_Deallocate(&destination);
-    if (source) {
-        parcMemory_Deallocate(&source);
-    }
-
-    _URISpecificationParameters_Destroy(&parameters);
-
-    return result;
-}
-
-static AthenaTransportLink *
-_UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
-{
-    AthenaTransportLink *result = 0;
-
-    _URISpecificationParameters *parameters = _parseURISpecification(athenaTransportLinkModule, connectionURI);
-    if (parameters == NULL) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to parse connection URI specification (%s)", connectionURI);
-        errno = EINVAL;
-        return NULL;
-    }
-
-    struct sockaddr_in *destination = parcNetwork_SockInet4Address(parameters->address, parameters->port);
-    destination->sin_len = sizeof(struct sockaddr_in);
-    struct sockaddr_in *source = parcNetwork_SockInet4Address(parameters->address, parameters->srcPort);
-    if (source) {
-        source->sin_len = sizeof(struct sockaddr_in);
-    }
-
-    result = _UDPOpenCommon(athenaTransportLinkModule, parameters, (struct sockaddr *)destination, (struct sockaddr *)source);
-
-    parcMemory_Deallocate(&destination);
-    if (source) {
-        parcMemory_Deallocate(&source);
     }
 
     _URISpecificationParameters_Destroy(&parameters);
@@ -1266,7 +1203,7 @@ athenaTransportLinkModuleUDP_Init()
     assertTrue(result == true, "parcArrayList_Add failed");
 
     athenaTransportLinkModule = athenaTransportLinkModule_Create("UDP6",
-                                                                 _UDP6Open,
+                                                                 _UDPOpen,
                                                                  _UDPPoll);
     assertNotNull(athenaTransportLinkModule, "parcMemory_AllocateAndClear failed allocate UDP athenaTransportLinkModule");
     result = parcArrayList_Add(moduleList, athenaTransportLinkModule);
