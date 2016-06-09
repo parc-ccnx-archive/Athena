@@ -77,6 +77,9 @@
 
 static int _listenerBacklog = 16;
 
+#define TCP_SCHEME "tcp"
+#define TCP6_SCHEME "tcp6"
+
 //
 // Platform support required for managing SIGPIPE.
 //
@@ -97,10 +100,8 @@ static int _listenerBacklog = 16;
 //
 typedef struct _TCPLinkData {
     int fd;
-    struct sockaddr_in myAddress;
-    socklen_t myAddressLength;
-    struct sockaddr_in peerAddress;
-    socklen_t peerAddressLength;
+    struct sockaddr_storage myAddress;
+    struct sockaddr_storage peerAddress;
     struct {
         size_t receive_ReadHeaderFailure;
         size_t receive_BadMessageLength;
@@ -149,16 +150,17 @@ static const char *
 _createNameFromLinkData(const _TCPLinkData *linkData)
 {
     char nameBuffer[MAXPATHLEN];
-    const char *protocol = "tcp";
+    const char *protocol;
 
     // Get our local hostname and port
     char myHost[NI_MAXHOST], myPort[NI_MAXSERV];
-    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, linkData->myAddressLength,
+    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, linkData->myAddress.ss_len,
                                myHost, NI_MAXHOST, myPort, NI_MAXSERV, NI_NUMERICSERV);
 
+    protocol = (linkData->myAddress.ss_family == AF_INET6) ? TCP6_SCHEME : TCP_SCHEME;
     // Get our peer's hostname and port
     char peerHost[NI_MAXHOST], peerPort[NI_MAXSERV];
-    int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, linkData->peerAddressLength,
+    int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, linkData->peerAddress.ss_len,
                                  peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
 
     if ((peerResult == 0) && (myResult == 0)) { // point to point connection
@@ -440,8 +442,12 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _TCPLinkData *lin
     // Messages without sufficient hop count collateral will be dropped.
     // Local links will always be allowed to be taken (i.e. localhost).
     bool isLocal = false;
-    if (linkData->peerAddress.sin_addr.s_addr == linkData->myAddress.sin_addr.s_addr) { // a local connection
-        isLocal = true;
+    if (linkData->peerAddress.ss_family == AF_INET) {
+        if (((struct sockaddr_in *)&linkData->peerAddress)->sin_addr.s_addr ==
+            ((struct sockaddr_in *)&linkData->myAddress)->sin_addr.s_addr)
+            isLocal = true;
+    } else if (linkData->peerAddress.ss_family == AF_INET6) {
+        // XXX
     }
     athenaTransportLink_SetLocal(athenaTransportLink, isLocal);
 
@@ -471,11 +477,9 @@ _setSocketOptions(AthenaTransportLinkModule *athenaTransportLinkModule, int fd)
 }
 
 static AthenaTransportLink *
-_TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, char *address, in_port_t port)
+_TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr *sockaddr)
 {
     const char *derivedLinkName;
-
-    struct sockaddr_in *sockaddr = parcNetwork_SockInet4Address(address, port);
 
     _TCPLinkData *linkData = _TCPLinkData_Create();
 
@@ -487,11 +491,9 @@ _TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
     }
 
     // Connect to the specified peer
-    linkData->peerAddress = *sockaddr;
-    linkData->peerAddressLength = sizeof(struct sockaddr);
-    parcMemory_Deallocate(&sockaddr);
+    linkData->peerAddress = *(struct sockaddr_storage *)sockaddr;
 
-    int result = connect(linkData->fd, (struct sockaddr *) &linkData->peerAddress, linkData->peerAddressLength);
+    int result = connect(linkData->fd, (struct sockaddr *) &linkData->peerAddress, linkData->peerAddress.ss_len);
     if (result < 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "connect error (%s)", strerror(errno));
         _TCPLinkData_Destroy(&linkData);
@@ -506,8 +508,9 @@ _TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
     }
 
     // Retrieve the local endpoint data, used to create the derived name.
-    linkData->myAddressLength = sizeof(struct sockaddr);
-    result = getsockname(linkData->fd, (struct sockaddr *) &linkData->myAddress, &linkData->myAddressLength);
+    socklen_t addressLength;
+    result = getsockname(linkData->fd, (struct sockaddr *) &linkData->myAddress, &addressLength);
+    linkData->myAddress.ss_len = addressLength; //XXX needed? XXX
     if (result != 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Failed to obtain endpoint information from getsockname.");
@@ -551,8 +554,9 @@ _TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
     _TCPLinkData *newLinkData = _TCPLinkData_Create();
 
     // Accept a new tunnel connection.
-    newLinkData->peerAddressLength = sizeof(struct sockaddr_in);
-    newLinkData->fd = accept(listenerData->fd, (struct sockaddr *) &newLinkData->peerAddress, &newLinkData->peerAddressLength);
+    socklen_t addressLength;
+    newLinkData->fd = accept(listenerData->fd, (struct sockaddr *) &newLinkData->peerAddress, &addressLength);
+    newLinkData->peerAddress.ss_len = addressLength;
     if (newLinkData->fd == -1) {
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "_TCPReceiveListener accept: %s", strerror(errno));
         _TCPLinkData_Destroy(&newLinkData);
@@ -560,8 +564,8 @@ _TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
     }
 
     // Get the bound local hostname and port.  The listening address may have been wildcarded.
-    newLinkData->myAddressLength = listenerData->myAddressLength;
-    getsockname(newLinkData->fd, (struct sockaddr *) &newLinkData->myAddress, &newLinkData->myAddressLength);
+    getsockname(newLinkData->fd, (struct sockaddr *) &newLinkData->myAddress, &addressLength);
+    newLinkData->myAddress.ss_len = addressLength;
 
     // Clone a new link from the current listener.
     const char *derivedLinkName = _createNameFromLinkData(newLinkData);
@@ -602,17 +606,13 @@ _TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
 }
 
 static AthenaTransportLink *
-_TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, char *address, in_port_t port)
+_TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr *sockaddr)
 {
     const char *derivedLinkName;
 
-    struct sockaddr_in *sockaddr = parcNetwork_SockInet4Address(address, port);
-
     _TCPLinkData *linkData = _TCPLinkData_Create();
 
-    linkData->myAddress = *sockaddr;
-    linkData->myAddressLength = sizeof(struct sockaddr_in);
-    parcMemory_Deallocate(&sockaddr);
+    linkData->myAddress = *(struct sockaddr_storage *)sockaddr;
 
     linkData->fd = socket(AF_INET, SOCK_STREAM, 0);
     if (linkData->fd < 0) {
@@ -648,7 +648,7 @@ _TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     }
 
     // bind and listen on requested address
-    result = bind(linkData->fd, (struct sockaddr *) &linkData->myAddress, linkData->myAddressLength);
+    result = bind(linkData->fd, (struct sockaddr *) &linkData->myAddress, linkData->myAddress.ss_len);
     if (result) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "bind error (%s)", strerror(errno));
@@ -707,72 +707,105 @@ _TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 #define LINK_NAME_SPECIFIER "name%3D"
 #define LOCAL_LINK_FLAG "local%3D"
 
-static int
-_parseLinkName(const char *token, char *name)
+typedef struct _URISpecificationParameters {
+    char *linkName;
+    struct sockaddr_storage *destination;
+    bool listener;
+    int forceLocal;
+} _URISpecificationParameters;
+
+static struct sockaddr_storage *
+_getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
 {
-    if (sscanf(token, "%*[^%%]%%3D%s", name) != 1) {
-        return -1;
+    struct sockaddr_storage *sockaddr = NULL;
+
+    if (strcmp(moduleName, TCP_SCHEME) == 0) {
+        char address[INET_ADDRSTRLEN];
+        struct addrinfo hints = { .ai_family = AF_INET };
+        struct addrinfo *ai;
+
+        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
+            // Convert given hostname to a canonical presentation
+            inet_ntop(AF_INET, (void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr, address, INET_ADDRSTRLEN);
+            freeaddrinfo(ai);
+            sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet4Address(address, port);
+            sockaddr->ss_len = sizeof(struct sockaddr_in);
+        }
+    } else if (strcmp(moduleName, TCP6_SCHEME) == 0) {
+        char address[INET6_ADDRSTRLEN];
+        struct addrinfo hints = { .ai_family = AF_INET6 };
+        struct addrinfo *ai;
+
+        if (hostname[0] == '[') {
+            hostname = parcMemory_StringDuplicate(hostname + 1, strlen(hostname) - 2);
+        } else {
+            hostname = parcMemory_StringDuplicate(hostname, strlen(hostname));
+        }
+        if (getaddrinfo(hostname, NULL, &hints, &ai) == 0) {
+            // Convert given hostname to a canonical presentation
+            inet_ntop(AF_INET6, (void *)&((struct sockaddr_in6 *)ai->ai_addr)->sin6_addr, address, INET6_ADDRSTRLEN);
+            freeaddrinfo(ai);
+            sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet6Address(address, port,
+                                                                               ((struct sockaddr_in6 *)ai->ai_addr)->sin6_flowinfo,
+                                                                               ((struct sockaddr_in6 *)ai->ai_addr)->sin6_scope_id);
+            sockaddr->ss_len = sizeof(struct sockaddr_in6);
+        }
+        parcMemory_Deallocate(&hostname);
     }
-    return 0;
+
+    return sockaddr;
 }
 
-static int
-_parseLocalFlag(const char *token)
+static void
+_URISpecificationParameters_Destroy(_URISpecificationParameters **parameters)
 {
-    int forceLocal = 0;
-    char localFlag[MAXPATHLEN] = { 0 };
-    if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
-        return 0;
+    if ((*parameters)->linkName) {
+        parcMemory_Deallocate(&((*parameters)->linkName));
     }
-    if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
-        forceLocal = AthenaTransportLink_ForcedNonLocal;
-    } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
-        forceLocal = AthenaTransportLink_ForcedLocal;
+    if ((*parameters)->destination) {
+        parcMemory_Deallocate(&((*parameters)->destination));
     }
-    return forceLocal;
+    parcMemory_Deallocate(parameters);
 }
 
-static AthenaTransportLink *
-_TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
+#include <parc/algol/parc_URIAuthority.h>
+
+static _URISpecificationParameters *
+_URISpecificationParameters_Create(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
 {
-    AthenaTransportLink *result = 0;
+    const char *moduleName = parcURI_GetScheme(connectionURI);
+    _URISpecificationParameters *parameters = parcMemory_AllocateAndClear(sizeof(_URISpecificationParameters));
 
     const char *authorityString = parcURI_GetAuthority(connectionURI);
     if (authorityString == NULL) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Unable to parse connection authority %s", authorityString);
         errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
         return NULL;
     }
     PARCURIAuthority *authority = parcURIAuthority_Parse(authorityString);
-    const char *URIAddress = parcURIAuthority_GetHostName(authority);
+    const char *hostname = parcURIAuthority_GetHostName(authority);
     in_port_t port = parcURIAuthority_GetPort(authority);
-
-    // Normalize the provided hostname
-    struct sockaddr_in *addr = (struct sockaddr_in *) parcNetwork_SockAddress(URIAddress, port);
-    if (addr == NULL) {
+    if (port == 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to derive sockaddr from address %s", URIAddress);
+                      "Invalid address specification, port == 0");
+        errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
         parcURIAuthority_Release(&authority);
-        errno = EINVAL;
         return NULL;
     }
-    char *address = inet_ntoa(addr->sin_addr);
-    parcMemory_Deallocate(&addr);
 
-    parcURIAuthority_Release(&authority);
-
-    if (address == NULL) {
+    parameters->destination = _getSockaddr(moduleName, hostname, port);
+    if (parameters->destination == NULL) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to lookup hostname %s", address);
+                      "Unable to create sockaddr for %s", hostname);
         errno = EINVAL;
+        _URISpecificationParameters_Destroy(&parameters);
+        parcURIAuthority_Release(&authority);
         return NULL;
     }
-
-    bool listener = false;
-    int forceLocal = 0;
-    char specifiedLinkName[MAXPATHLEN] = { 0 };
-    const char *linkName = NULL;
+    parcURIAuthority_Release(&authority);
 
     PARCURIPath *remainder = parcURI_GetPath(connectionURI);
     size_t segments = parcURIPath_Count(remainder);
@@ -781,30 +814,41 @@ _TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         const char *token = parcURISegment_ToString(segment);
 
         if (strcasecmp(token, TCP_LISTENER_FLAG) == 0) {
-            listener = true;
+            parameters->listener = true;
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LINK_NAME_SPECIFIER, strlen(LINK_NAME_SPECIFIER)) == 0) {
-            if (_parseLinkName(token, specifiedLinkName) != 0) {
+            char specifiedLinkName[MAXPATHLEN];
+            if (sscanf(token, "%*[^%%]%%3D%s", specifiedLinkName) != 1) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection name specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
                 return NULL;
             }
-            linkName = specifiedLinkName;
+            parameters->linkName = parcMemory_StringDuplicate(specifiedLinkName, strlen(specifiedLinkName));
             parcMemory_Deallocate(&token);
             continue;
         }
 
         if (strncasecmp(token, LOCAL_LINK_FLAG, strlen(LOCAL_LINK_FLAG)) == 0) {
-            forceLocal = _parseLocalFlag(token);
-            if (forceLocal == 0) {
+            char localFlag[MAXPATHLEN] = { 0 };
+            if (sscanf(token, "%*[^%%]%%3D%s", localFlag) != 1) {
+                _URISpecificationParameters_Destroy(&parameters);
+                return 0;
+            }
+            if (strncasecmp(localFlag, "false", strlen("false")) == 0) {
+                parameters->forceLocal = AthenaTransportLink_ForcedNonLocal;
+            } else if (strncasecmp(localFlag, "true", strlen("true")) == 0) {
+                parameters->forceLocal = AthenaTransportLink_ForcedLocal;
+            } else {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper local specification (%s)", token);
                 parcMemory_Deallocate(&token);
+                _URISpecificationParameters_Destroy(&parameters);
                 errno = EINVAL;
                 return NULL;
             }
@@ -814,21 +858,38 @@ _TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Unknown connection parameter (%s)", token);
+        _URISpecificationParameters_Destroy(&parameters);
         parcMemory_Deallocate(&token);
         errno = EINVAL;
         return NULL;
     }
+    return parameters;
+}
+static AthenaTransportLink *
+_TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
+{
+    AthenaTransportLink *result = 0;
 
-    if (listener) {
-        result = _TCPOpenListener(athenaTransportLinkModule, linkName, address, port);
+    _URISpecificationParameters *parameters = _URISpecificationParameters_Create(athenaTransportLinkModule, connectionURI);
+    if (parameters == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Unable to parse connection URI specification (%s)", connectionURI);
+        errno = EINVAL;
+        return NULL;
+    }
+
+    if (parameters->listener) {
+        result = _TCPOpenListener(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)parameters->destination);
     } else {
-        result = _TCPOpenConnection(athenaTransportLinkModule, linkName, address, port);
+        result = _TCPOpenConnection(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)parameters->destination);
     }
 
     // forced IsLocal/IsNotLocal, mainly for testing
-    if (result && forceLocal) {
-        athenaTransportLink_ForceLocal(result, forceLocal);
+    if (result && parameters->forceLocal) {
+        athenaTransportLink_ForceLocal(result, parameters->forceLocal);
     }
+
+    _URISpecificationParameters_Destroy(&parameters);
 
     return result;
 }
@@ -852,6 +913,13 @@ athenaTransportLinkModuleTCP_Init()
                                                                  _TCPPoll);
     assertNotNull(athenaTransportLinkModule, "parcMemory_AllocateAndClear failed allocate TCP athenaTransportLinkModule");
     bool result = parcArrayList_Add(moduleList, athenaTransportLinkModule);
+    assertTrue(result == true, "parcArrayList_Add failed");
+
+    athenaTransportLinkModule = athenaTransportLinkModule_Create("TCP6",
+                                                                 _TCPOpen,
+                                                                 _TCPPoll);
+    assertNotNull(athenaTransportLinkModule, "parcMemory_AllocateAndClear failed allocate TCP athenaTransportLinkModule");
+    result = parcArrayList_Add(moduleList, athenaTransportLinkModule);
     assertTrue(result == true, "parcArrayList_Add failed");
 
     return moduleList;
