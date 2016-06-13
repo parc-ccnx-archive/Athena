@@ -483,7 +483,7 @@ _TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
 
     _TCPLinkData *linkData = _TCPLinkData_Create();
 
-    linkData->fd = socket(AF_INET, SOCK_STREAM, 0);
+    linkData->fd = socket(sockaddr->sa_family, SOCK_STREAM, 0);
     if (linkData->fd < 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "socket error (%s)", strerror(errno));
         _TCPLinkData_Destroy(&linkData);
@@ -554,7 +554,7 @@ _TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
     _TCPLinkData *newLinkData = _TCPLinkData_Create();
 
     // Accept a new tunnel connection.
-    socklen_t addressLength;
+    socklen_t addressLength = sizeof(newLinkData->peerAddress);
     newLinkData->fd = accept(listenerData->fd, (struct sockaddr *) &newLinkData->peerAddress, &addressLength);
     newLinkData->peerAddress.ss_len = addressLength;
     if (newLinkData->fd == -1) {
@@ -614,7 +614,7 @@ _TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
 
     linkData->myAddress = *(struct sockaddr_storage *)sockaddr;
 
-    linkData->fd = socket(AF_INET, SOCK_STREAM, 0);
+    linkData->fd = socket(sockaddr->sa_family, SOCK_STREAM, 0);
     if (linkData->fd < 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "socket error (%s)", strerror(errno));
