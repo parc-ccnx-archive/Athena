@@ -567,12 +567,18 @@ _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *
 
     // If not statically linked in, look for a shared library and load it from there
     if (_init == NULL) {
-        // Derive the library name from the provided module name
+        // Derive the library name from the longest matching prefix of the provided module name that matches a file
         const char *moduleLibrary;
-        moduleLibrary = _moduleNameToLibrary(moduleName);
-
-        void *linkModule = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
-        parcMemory_Deallocate(&moduleLibrary);
+        int moduleNameLength = strlen(moduleName);
+        void *linkModule = NULL;
+        do {
+            // drop the last character in the name from each successive iteration
+            char *moduleNameCopy = parcMemory_StringDuplicate(moduleName, moduleNameLength--);
+            moduleLibrary = _moduleNameToLibrary(moduleNameCopy);
+            parcMemory_Deallocate(&moduleNameCopy);
+            linkModule = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
+            parcMemory_Deallocate(&moduleLibrary);
+        } while ((linkModule == NULL) && moduleNameLength);
 
         // If the shared library wasn't found, look for the symbol in our existing image.  This
         // allows a link module to be linked directly into Athena without modifying the forwarder.

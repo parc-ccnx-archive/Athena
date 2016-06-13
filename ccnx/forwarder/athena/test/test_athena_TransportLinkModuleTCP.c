@@ -168,11 +168,6 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP6_OpenClose)
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
 
-    connectionURI = parcURI_Parse("tcp://xxxx/name=TCP_1");
-    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
-    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
-    parcURI_Release(&connectionURI);
-
     connectionURI = parcURI_Parse("tcp6://xxxx/name=TCP_1");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
@@ -278,11 +273,6 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP6_SendReceive)
     const char *result;
     AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
     assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
-
-    connectionURI = parcURI_Parse("tcp://xxxx/name=TCP_1");
-    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
-    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
-    parcURI_Release(&connectionURI);
 
     connectionURI = parcURI_Parse("tcp6://localhost:40000/Listener/name=TCPListener");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);

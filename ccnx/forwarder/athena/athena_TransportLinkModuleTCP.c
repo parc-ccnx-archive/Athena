@@ -925,6 +925,12 @@ athenaTransportLinkModuleTCP_Init()
     return moduleList;
 }
 
+PARCArrayList *
+athenaTransportLinkModuleTCP6_Init()
+{
+    return athenaTransportLinkModuleTCP_Init();
+}
+
 void
 athenaTransportLinkModuleTCP_Fini()
 {
