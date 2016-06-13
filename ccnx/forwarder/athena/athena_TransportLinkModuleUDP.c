@@ -381,7 +381,10 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _UDPLinkData *lin
             ((struct sockaddr_in *)&linkData->link.myAddress)->sin_addr.s_addr)
             isLocal = true;
     } else if (linkData->link.peerAddress.ss_family == AF_INET6) {
-        // XXX
+        if (memcmp(((struct sockaddr_in6 *)&linkData->link.peerAddress)->sin6_addr.__u6_addr.__u6_addr8,
+                   ((struct sockaddr_in6 *)&linkData->link.myAddress)->sin6_addr.__u6_addr.__u6_addr8, 16) == 0) {
+            isLocal = true;
+        }
     }
     athenaTransportLink_SetLocal(athenaTransportLink, isLocal);
 }
@@ -940,6 +943,7 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
         struct addrinfo *ai;
 
         if (hostname[0] == '[') {
+            assertTrue(hostname[strlen(hostname) - 1] == ']', "Malformed IPv6 hostname");
             hostname = parcMemory_StringDuplicate(hostname + 1, strlen(hostname) - 2);
         } else {
             hostname = parcMemory_StringDuplicate(hostname, strlen(hostname));
@@ -1124,7 +1128,7 @@ _URISpecificationParameters_Create(AthenaTransportLinkModule *athenaTransportLin
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Unknown connection parameter (%s)", token);
         parcMemory_Deallocate(&token);
-	_URISpecificationParameters_Destroy(&parameters);
+        _URISpecificationParameters_Destroy(&parameters);
         errno = EINVAL;
         return NULL;
     }

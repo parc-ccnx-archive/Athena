@@ -447,7 +447,10 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _TCPLinkData *lin
             ((struct sockaddr_in *)&linkData->myAddress)->sin_addr.s_addr)
             isLocal = true;
     } else if (linkData->peerAddress.ss_family == AF_INET6) {
-        // XXX
+        if (memcmp(((struct sockaddr_in6 *)&linkData->peerAddress)->sin6_addr.__u6_addr.__u6_addr8,
+                   ((struct sockaddr_in6 *)&linkData->myAddress)->sin6_addr.__u6_addr.__u6_addr8, 16) == 0) {
+            isLocal = true;
+        }
     }
     athenaTransportLink_SetLocal(athenaTransportLink, isLocal);
 
@@ -508,9 +511,8 @@ _TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
     }
 
     // Retrieve the local endpoint data, used to create the derived name.
-    socklen_t addressLength;
+    socklen_t addressLength = sizeof(linkData->myAddress);
     result = getsockname(linkData->fd, (struct sockaddr *) &linkData->myAddress, &addressLength);
-    linkData->myAddress.ss_len = addressLength; //XXX needed? XXX
     if (result != 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "Failed to obtain endpoint information from getsockname.");
@@ -556,7 +558,6 @@ _TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
     // Accept a new tunnel connection.
     socklen_t addressLength = sizeof(newLinkData->peerAddress);
     newLinkData->fd = accept(listenerData->fd, (struct sockaddr *) &newLinkData->peerAddress, &addressLength);
-    newLinkData->peerAddress.ss_len = addressLength;
     if (newLinkData->fd == -1) {
         parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "_TCPReceiveListener accept: %s", strerror(errno));
         _TCPLinkData_Destroy(&newLinkData);
@@ -565,7 +566,6 @@ _TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
 
     // Get the bound local hostname and port.  The listening address may have been wildcarded.
     getsockname(newLinkData->fd, (struct sockaddr *) &newLinkData->myAddress, &addressLength);
-    newLinkData->myAddress.ss_len = addressLength;
 
     // Clone a new link from the current listener.
     const char *derivedLinkName = _createNameFromLinkData(newLinkData);
@@ -933,5 +933,10 @@ athenaTransportLinkModuleTCP6_Init()
 
 void
 athenaTransportLinkModuleTCP_Fini()
+{
+}
+
+void
+athenaTransportLinkModuleTCP6_Fini()
 {
 }
