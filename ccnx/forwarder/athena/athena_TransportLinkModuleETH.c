@@ -188,7 +188,7 @@ _ETHLinkData_Destroy(_ETHLinkData **linkData)
  * @endcode
  */
 static const char *
-_createNameFromLinkData(const _connectionPair *linkData, bool listener)
+_createNameFromLinkData(_ETHLinkData *linkData, bool listener)
 {
     char nameBuffer[MAXPATHLEN];
     const char *protocol = "eth";
@@ -197,13 +197,13 @@ _createNameFromLinkData(const _connectionPair *linkData, bool listener)
     char myMACString[ETHER_ADDR_LEN * 3];
     char peerMACString[ETHER_ADDR_LEN * 3];
 
-    _addressToString(linkData->myAddress.ether_addr_octet, myMACString);
+    _addressToString(linkData->link.myAddress.ether_addr_octet, myMACString);
 
-    if (!listener) {
-        _addressToString(linkData->peerAddress.ether_addr_octet, peerMACString);
-        sprintf(nameBuffer, "%s://%s<->%s", protocol, myMACString, peerMACString);
+    if (listener) {
+        sprintf(nameBuffer, "%s://%s:%s", protocol, athenaEthernet_GetName(linkData->athenaEthernet), myMACString);
     } else {
-        sprintf(nameBuffer, "%s://%s", protocol, myMACString);
+        _addressToString(linkData->link.peerAddress.ether_addr_octet, peerMACString);
+        sprintf(nameBuffer, "%s://%s:%s<->%s", protocol, athenaEthernet_GetName(linkData->athenaEthernet), myMACString, peerMACString);
     }
 
     return parcMemory_StringDuplicate(nameBuffer, strlen(nameBuffer));
@@ -418,7 +418,7 @@ _cloneNewLink(AthenaTransportLink *athenaTransportLink, struct ether_addr *peerA
     memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddressLength);
 
     // Clone a new link from the current listener.
-    const char *derivedLinkName = _createNameFromLinkData(&newLinkData->link, false);
+    const char *derivedLinkName = _createNameFromLinkData(newLinkData, false);
     AthenaTransportLink *newTransportLink = athenaTransportLink_Clone(athenaTransportLink,
                                                                       derivedLinkName,
                                                                       _ETHSend,
@@ -646,7 +646,7 @@ _ETHOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
     memcpy(&(linkData->link.peerAddress), destination, sizeof(struct ether_addr));
     linkData->link.peerAddressLength = ETHER_ADDR_LEN;
 
-    derivedLinkName = _createNameFromLinkData(&linkData->link, false);
+    derivedLinkName = _createNameFromLinkData(linkData, false);
 
     if (linkName == NULL) {
         linkName = derivedLinkName;
@@ -743,7 +743,7 @@ _ETHOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
         return NULL;
     }
 
-    derivedLinkName = _createNameFromLinkData(&linkData->link, true);
+    derivedLinkName = _createNameFromLinkData(linkData, true);
 
     if (linkName == NULL) {
         linkName = derivedLinkName;

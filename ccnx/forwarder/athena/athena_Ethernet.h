@@ -263,4 +263,20 @@ ssize_t athenaEthernet_Send(AthenaEthernet *athenaEthernet, struct iovec *iov, i
  */
 int athenaEthernet_GetDescriptor(AthenaEthernet *athenaEthernet);
 
+/**
+ * @abstract return the platform device name for the specified instance
+ * @discussion
+ *
+ * @param [in] athenaEthernet instance
+ * @return string containing name of interface
+ *
+ * Example:
+ * @code
+ * {
+ *     const char *interfaceName = athenaEthernet_GetName(athenaEthernet);
+ * }
+ * @endcode
+ */
+const char *athenaEthernet_GetName(AthenaEthernet *athenaEthernet);
+
 #endif // libathena_Ethernet_h

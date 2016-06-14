@@ -89,6 +89,7 @@ struct AthenaEthernet {
     PARCBuffer *bpfBuffer;
     PARCLog *log;
     ssize_t readCount;
+    const char *ifname;
 };
 
 static void
@@ -98,6 +99,9 @@ _athenaEthernet_Destroy(AthenaEthernet **athenaEthernet)
     close((*athenaEthernet)->fd);
     if ((*athenaEthernet)->bpfBuffer) {
         parcBuffer_Release(&((*athenaEthernet)->bpfBuffer));
+    }
+    if ((*athenaEthernet)->ifname) {
+        parcMemory_Deallocate(&((*athenaEthernet)->ifname));
     }
 }
 
@@ -144,6 +148,7 @@ _open_socket(const char *device)
     strncpy(if_idx.ifr_name, device, strlen(device) + 1);
     if (ioctl(etherSocket, BIOCSETIF, &if_idx)) {
         perror("BIOCSETIF");
+        close(etherSocket);
         return -1;
     }
 
@@ -151,6 +156,7 @@ _open_socket(const char *device)
     uint32_t on = 1;
     if (ioctl(etherSocket, BIOCIMMEDIATE, &on)) {
         perror("BIOCIMMEDIATE");
+        close(etherSocket);
         return -1;
     }
 
@@ -174,6 +180,7 @@ _open_socket(const char *device)
     filterCode.bf_insns = &instructions[0];
     if (ioctl(etherSocket, BIOCSETF, &filterCode) < 0) {
         perror("BIOCSETF");
+        close(etherSocket);
         return -1;
     }
 
@@ -197,6 +204,7 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
 
     if (ioctl(athenaEthernet->fd, BIOCGBLEN, &(athenaEthernet->etherBufferLength))) {
         perror("error getting buffer length");
+        athenaEthernet_Release(&athenaEthernet);
         return NULL;
     }
 
@@ -205,6 +213,7 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
     int res = getifaddrs(&ifaddr);
     if (res == -1) {
         perror("getifaddrs");
+        athenaEthernet_Release(&athenaEthernet);
         return 0;
     }
 
@@ -220,6 +229,7 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
 
                 struct if_data *ifdata = (struct if_data *) next->ifa_data;
                 athenaEthernet->mtu = ifdata->ifi_mtu;
+                athenaEthernet->ifname = parcMemory_StringDuplicate(addr_dl->sdl_data, addr_dl->sdl_nlen);
 
                 // break out of loop and freeifaddrs
                 break;
@@ -229,6 +239,12 @@ athenaEthernet_Create(PARCLog *log, const char *interface, uint16_t etherType)
     freeifaddrs(ifaddr);
 
     return athenaEthernet;
+}
+
+const char *
+athenaEthernet_GetName(AthenaEthernet *athenaEthernet)
+{
+    return athenaEthernet->ifname;
 }
 
 uint32_t
