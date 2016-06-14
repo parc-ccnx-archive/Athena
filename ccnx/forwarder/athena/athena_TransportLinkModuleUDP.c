@@ -172,6 +172,9 @@ _UDPLinkData_Destroy(_UDPLinkData **linkData)
  * }
  * @endcode
  */
+#define SOCKADDR_IN_LEN(s) (socklen_t)((((struct sockaddr_in *)s)->sin_family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6))
+#define SOCKADDR_LEN(s) (socklen_t)sizeof(struct sockaddr)
+
 static const char *
 _createNameFromLinkData(const _connectionPair *linkData)
 {
@@ -180,13 +183,13 @@ _createNameFromLinkData(const _connectionPair *linkData)
 
     // Get our local hostname and port
     char myHost[NI_MAXHOST], myPort[NI_MAXSERV];
-    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, linkData->myAddress.ss_len,
+    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, SOCKADDR_IN_LEN(&linkData->myAddress),
                                myHost, NI_MAXHOST, myPort, NI_MAXSERV, NI_NUMERICSERV);
 
     // Get our peer's hostname and port
     char peerHost[NI_MAXHOST], peerPort[NI_MAXSERV];
     int peerResult = 0;
-    peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, linkData->peerAddress.ss_len,
+    peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress),
                              peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
 
     protocol = (linkData->myAddress.ss_family == AF_INET6) ? UDP6_SCHEME : UDP_SCHEME;
@@ -245,10 +248,10 @@ _sendBuffer(AthenaTransportLink *athenaTransportLink, PARCBuffer *wireFormatBuff
     ssize_t writeCount = 0;
 #ifdef LINUX_IGNORESIGPIPE
     writeCount = sendto(linkData->fd, buffer, length, MSG_NOSIGNAL,
-                        (struct sockaddr *)&linkData->link.peerAddress, linkData->link.peerAddress.ss_len);
+                        (struct sockaddr *)&linkData->link.peerAddress, SOCKADDR_IN_LEN(&linkData->link.peerAddress));
 #else
     writeCount = sendto(linkData->fd, buffer, length, 0,
-                        (struct sockaddr *)&linkData->link.peerAddress, linkData->link.peerAddress.ss_len);
+                        (struct sockaddr *)&linkData->link.peerAddress, SOCKADDR_IN_LEN(&linkData->link.peerAddress));
 #endif
 
     // on error close the link, else return to retry a zero write
@@ -381,8 +384,8 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _UDPLinkData *lin
             ((struct sockaddr_in *)&linkData->link.myAddress)->sin_addr.s_addr)
             isLocal = true;
     } else if (linkData->link.peerAddress.ss_family == AF_INET6) {
-        if (memcmp(((struct sockaddr_in6 *)&linkData->link.peerAddress)->sin6_addr.__u6_addr.__u6_addr8,
-                   ((struct sockaddr_in6 *)&linkData->link.myAddress)->sin6_addr.__u6_addr.__u6_addr8, 16) == 0) {
+        if (memcmp(((struct sockaddr_in6 *)&linkData->link.peerAddress)->sin6_addr.s6_addr,
+                   ((struct sockaddr_in6 *)&linkData->link.myAddress)->sin6_addr.s6_addr, 16) == 0) {
             isLocal = true;
         }
     }
@@ -413,9 +416,9 @@ _cloneNewLink(AthenaTransportLink *athenaTransportLink, struct sockaddr_storage 
     newLinkData->queue = parcDeque_Create();
     assertNotNull(newLinkData->queue, "Could not create data queue for new link");
 
-    memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, linkData->link.myAddress.ss_len);
+    memcpy(&newLinkData->link.myAddress, &linkData->link.myAddress, SOCKADDR_IN_LEN(&linkData->link.myAddress));
 
-    memcpy(&newLinkData->link.peerAddress, peerAddress, peerAddress->ss_len);
+    memcpy(&newLinkData->link.peerAddress, peerAddress, SOCKADDR_IN_LEN(peerAddress));
 
     // Clone a new link from the current listener.
     const char *derivedLinkName = _createNameFromLinkData(&newLinkData->link);
@@ -472,7 +475,7 @@ _hashAddress(struct sockaddr_storage *address)
         return ((unsigned long) ((struct sockaddr_in *)address)->sin_addr.s_addr << 32) |
                                 ((struct sockaddr_in *)address)->sin_port;
     } else if (address->ss_family == AF_INET6) {
-        uint64_t sin6addrHash = parcHash64_Data(&((struct sockaddr_in6 *)address)->sin6_addr.__u6_addr.__u6_addr8, 16);
+        uint64_t sin6addrHash = parcHash64_Data(&((struct sockaddr_in6 *)address)->sin6_addr.s6_addr, 16);
         return parcHash64_Data_Cumulative(&((struct sockaddr_in6 *)address)->sin6_port, sizeof(in_port_t), sin6addrHash);
     } else {
         assertTrue(0, "Unsupported address family %d\n", address->ss_family);
@@ -710,8 +713,7 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
 
     _UDPLinkData *linkData = _UDPLinkData_Create();
 
-    assertTrue(destination->sa_len != 0, "Empty address structure");
-    memcpy(&linkData->link.peerAddress, destination, destination->sa_len);
+    memcpy(&linkData->link.peerAddress, destination, SOCKADDR_IN_LEN(destination));
     if (mtu) {
         linkData->link.mtu = mtu;
     }
@@ -732,7 +734,7 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
 
     // bind the local endpoint so we can know our allocated port if it was wildcarded
     if (source) {
-        result = bind(linkData->fd, (struct sockaddr *) source, source->sa_len);
+        result = bind(linkData->fd, (struct sockaddr *) source, SOCKADDR_IN_LEN(source));
         if (result) {
             parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                           "bind error (%s)", strerror(errno));
@@ -740,8 +742,7 @@ _UDPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
             _UDPLinkData_Destroy(&linkData);
             return NULL;
         }
-        assertTrue(source->sa_len != 0, "Empty address structure");
-        memcpy(&linkData->link.myAddress, source, source->sa_len);
+        memcpy(&linkData->link.myAddress, source, SOCKADDR_IN_LEN(source));
     }
 
     // Retrieve the local endpoint data, used to create the derived name.
@@ -818,8 +819,7 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     linkData->multiplexTable = parcHashCodeTable_Create(_connectionEquals, _connectionHashCode, NULL, _closeConnection);
     assertNotNull(linkData->multiplexTable, "Could not create multiplex table for new listener");
 
-    assertTrue(destination->sa_len != 0, "Empty address structure");
-    memcpy(&linkData->link.myAddress, destination, destination->sa_len);
+    memcpy(&linkData->link.myAddress, destination, SOCKADDR_IN_LEN(destination));
     if (mtu) {
         linkData->link.mtu = mtu;
     }
@@ -858,7 +858,7 @@ _UDPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     }
 
     // bind to listen on requested address
-    result = bind(linkData->fd, (struct sockaddr *)&linkData->link.myAddress, linkData->link.myAddress.ss_len);
+    result = bind(linkData->fd, (struct sockaddr *)&linkData->link.myAddress, SOCKADDR_IN_LEN(&linkData->link.myAddress));
     if (result) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "bind error (%s)", strerror(errno));
@@ -934,7 +934,6 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
             inet_ntop(AF_INET, (void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr, address, INET_ADDRSTRLEN);
             freeaddrinfo(ai);
             sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet4Address(address, port);
-            sockaddr->ss_len = sizeof(struct sockaddr_in);
             return sockaddr;
         }
     } else if (strcmp(moduleName, UDP6_SCHEME) == 0) {
@@ -956,7 +955,6 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
             sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet6Address(address, port,
                                                                                ((struct sockaddr_in6 *)ai->ai_addr)->sin6_flowinfo,
                                                                                ((struct sockaddr_in6 *)ai->ai_addr)->sin6_scope_id);
-            sockaddr->ss_len = sizeof(struct sockaddr_in6);
             return sockaddr;
         }
         parcMemory_Deallocate(&hostname);
@@ -1035,7 +1033,7 @@ _URISpecificationParameters_Create(AthenaTransportLinkModule *athenaTransportLin
         }
 
         if (strncasecmp(token, SRC_LINK_SPECIFIER, strlen(SRC_LINK_SPECIFIER)) == 0) {
-            const char srcAddress[MAXPATHLEN];
+            char srcAddress[MAXPATHLEN];
             in_port_t srcPort;
             if (sscanf(token, "%*[^%%]%%3D%[^%%]%%3A%hd", (char *)srcAddress, &srcPort) != 2) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),

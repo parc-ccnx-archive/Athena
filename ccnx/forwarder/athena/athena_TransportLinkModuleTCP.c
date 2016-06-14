@@ -131,6 +131,9 @@ _TCPLinkData_Destroy(_TCPLinkData **linkData)
     parcMemory_Deallocate(linkData);
 }
 
+#define SOCKADDR_IN_LEN(s) (socklen_t)((((struct sockaddr_in *)s)->sin_family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6))
+#define SOCKADDR_LEN(s) (socklen_t)sizeof(struct sockaddr)
+
 /**
  * @abstract create link name based on file descriptor
  * @discussion
@@ -154,13 +157,13 @@ _createNameFromLinkData(const _TCPLinkData *linkData)
 
     // Get our local hostname and port
     char myHost[NI_MAXHOST], myPort[NI_MAXSERV];
-    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, linkData->myAddress.ss_len,
+    int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, SOCKADDR_IN_LEN(&linkData->myAddress),
                                myHost, NI_MAXHOST, myPort, NI_MAXSERV, NI_NUMERICSERV);
 
     protocol = (linkData->myAddress.ss_family == AF_INET6) ? TCP6_SCHEME : TCP_SCHEME;
     // Get our peer's hostname and port
     char peerHost[NI_MAXHOST], peerPort[NI_MAXSERV];
-    int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, linkData->peerAddress.ss_len,
+    int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress),
                                  peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
 
     if ((peerResult == 0) && (myResult == 0)) { // point to point connection
@@ -447,8 +450,8 @@ _setConnectLinkState(AthenaTransportLink *athenaTransportLink, _TCPLinkData *lin
             ((struct sockaddr_in *)&linkData->myAddress)->sin_addr.s_addr)
             isLocal = true;
     } else if (linkData->peerAddress.ss_family == AF_INET6) {
-        if (memcmp(((struct sockaddr_in6 *)&linkData->peerAddress)->sin6_addr.__u6_addr.__u6_addr8,
-                   ((struct sockaddr_in6 *)&linkData->myAddress)->sin6_addr.__u6_addr.__u6_addr8, 16) == 0) {
+        if (memcmp(((struct sockaddr_in6 *)&linkData->peerAddress)->sin6_addr.s6_addr,
+                   ((struct sockaddr_in6 *)&linkData->myAddress)->sin6_addr.s6_addr, 16) == 0) {
             isLocal = true;
         }
     }
@@ -496,7 +499,7 @@ _TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const c
     // Connect to the specified peer
     linkData->peerAddress = *(struct sockaddr_storage *)sockaddr;
 
-    int result = connect(linkData->fd, (struct sockaddr *) &linkData->peerAddress, linkData->peerAddress.ss_len);
+    int result = connect(linkData->fd, (struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress));
     if (result < 0) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "connect error (%s)", strerror(errno));
         _TCPLinkData_Destroy(&linkData);
@@ -648,7 +651,7 @@ _TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const cha
     }
 
     // bind and listen on requested address
-    result = bind(linkData->fd, (struct sockaddr *) &linkData->myAddress, linkData->myAddress.ss_len);
+    result = bind(linkData->fd, (struct sockaddr *) &linkData->myAddress, SOCKADDR_IN_LEN(&linkData->myAddress));
     if (result) {
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                       "bind error (%s)", strerror(errno));
@@ -729,7 +732,6 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
             inet_ntop(AF_INET, (void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr, address, INET_ADDRSTRLEN);
             freeaddrinfo(ai);
             sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet4Address(address, port);
-            sockaddr->ss_len = sizeof(struct sockaddr_in);
         }
     } else if (strcmp(moduleName, TCP6_SCHEME) == 0) {
         char address[INET6_ADDRSTRLEN];
@@ -748,7 +750,6 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
             sockaddr = (struct sockaddr_storage *)parcNetwork_SockInet6Address(address, port,
                                                                                ((struct sockaddr_in6 *)ai->ai_addr)->sin6_flowinfo,
                                                                                ((struct sockaddr_in6 *)ai->ai_addr)->sin6_scope_id);
-            sockaddr->ss_len = sizeof(struct sockaddr_in6);
         }
         parcMemory_Deallocate(&hostname);
     }
