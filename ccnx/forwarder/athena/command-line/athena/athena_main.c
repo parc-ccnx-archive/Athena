@@ -70,6 +70,7 @@
 #include <sys/param.h>
 #include <sys/utsname.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 #include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/forwarder/athena/athena_About.h>
@@ -95,26 +96,93 @@ _usage()
     printf("    -c | --connect    Transport link specification to create\n");
     printf("    -s | --store      Size of the content store in mega bytes\n");
     printf("    -o | --statefile  File to contain configuration state changes\n");
+    printf("    -i | --config     File containing configuration commands\n");
     printf("    -d | --debug      Turn on debug logging\n");
 }
 
 static struct option options[] = {
-    { .name = "store",     .has_arg = optional_argument, .flag = NULL, .val = 's' },
-    { .name = "connect",   .has_arg = optional_argument, .flag = NULL, .val = 'c' },
-    { .name = "statefile", .has_arg = optional_argument, .flag = NULL, .val = 'o' },
+    { .name = "store",     .has_arg = required_argument, .flag = NULL, .val = 's' },
+    { .name = "connect",   .has_arg = required_argument, .flag = NULL, .val = 'c' },
+    { .name = "config",    .has_arg = required_argument, .flag = NULL, .val = 'i' },
+    { .name = "statefile", .has_arg = required_argument, .flag = NULL, .val = 'o' },
     { .name = "help",      .has_arg = no_argument,       .flag = NULL, .val = 'h' },
     { .name = "version",   .has_arg = no_argument,       .flag = NULL, .val = 'v' },
     { .name = "debug",     .has_arg = no_argument,       .flag = NULL, .val = 'd' },
     { .name = NULL,        .has_arg = 0,                 .flag = NULL, .val = 0   },
 };
 
+static int
+_parseConfigurationFile(Athena *athena, const char *configurationFile)
+{
+    char configLine[MAXPATHLEN];
+    char *interestName = NULL;
+    char *interestPayload = NULL;
+    int lineNumber = 0;
+
+    FILE *input = fopen(configurationFile, "r");
+    if (input == NULL) {
+        printf("Could not open %s: %s\n", configurationFile, strerror(errno));
+        return -1;
+    }
+
+    while (fgets(configLine, MAXPATHLEN, input)) {
+        char *commandPtr = configLine;
+
+        // Skip initial white space, if any
+        while (isspace(*commandPtr)) {
+            commandPtr++;
+        }
+        if ((*commandPtr == '#') || (*commandPtr == '\0') ) { // Commented line
+            continue;
+        }
+        interestName = commandPtr;
+
+        // Scan and terminate the interest url
+        while (*commandPtr && (!isspace(*commandPtr))) {
+            commandPtr++;
+        }
+
+        // Scan and terminate the payload, if any
+        if (*commandPtr) {
+            *commandPtr++ = '\0';
+            interestPayload = commandPtr;
+        }
+        while (*commandPtr && (*commandPtr != '\n')) {
+            commandPtr++;
+        }
+        *commandPtr = '\0';
+
+        // Run the command
+        CCNxName *name = ccnxName_CreateFromCString(interestName);
+        if (name == NULL) {
+            printf("Could not parse %s\n", interestName);
+            continue;
+        }
+        CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+        ccnxName_Release(&name);
+
+        if (interestPayload) {
+            PARCBuffer *payload = parcBuffer_AllocateCString(interestPayload);
+            ccnxInterest_SetPayload(interest, payload);
+            parcBuffer_Release(&payload);
+        }
+        printf("[%d] %s %s\n", lineNumber++, interestName, interestPayload);
+        PARCBitVector *ingress = parcBitVector_Create();
+        athena_ProcessMessage(athena, interest, ingress);
+        parcBitVector_Release(&ingress);
+    }
+    fclose(input);
+    return 0;
+}
+
 static void
 _parseCommandLine(Athena *athena, int argc, char **argv)
 {
     int c;
     bool interfaceConfigured = false;
+    char *configurationFile = NULL;
 
-    while ((c = getopt_long(argc, argv, "hs:c:o:vd", options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hs:i:c:o:vd", options, NULL)) != -1) {
         switch (c) {
             case 's': {
                 int sizeInMB = atoi(optarg);
@@ -159,6 +227,9 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
                 athenaTransportLinkAdapter_SetLogLevel(athena->athenaTransportLinkAdapter, PARCLogLevel_Debug);
                 parcLog_SetLevel(athena->log, PARCLogLevel_Debug);
                 break;
+            case 'i':
+                configurationFile = optarg;
+                break;
             case 'h':
             default:
                 _usage();
@@ -171,6 +242,13 @@ _parseCommandLine(Athena *athena, int argc, char **argv)
         parcLog_Error(athena->log, "Bad arguments");
         _usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (configurationFile) {
+        if (_parseConfigurationFile(athena, configurationFile) != 0) {
+             exit(1);
+        }
+        return;
     }
 
     if (interfaceConfigured != true) {
