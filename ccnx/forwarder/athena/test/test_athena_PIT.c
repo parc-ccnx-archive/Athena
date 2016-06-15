@@ -332,7 +332,7 @@ LONGBOW_TEST_FIXTURE_SETUP(Global)
 
     PARCBuffer *keyId = parcBuffer_WrapCString("keyhash");
     PARCBuffer *sigbits = parcBuffer_WrapCString("siggybits");
-    PARCSignature *signature = parcSignature_Create(PARCSigningAlgorithm_RSA, PARC_HASH_SHA256, sigbits);
+    PARCSignature *signature = parcSignature_Create(PARCSigningAlgorithm_RSA, PARCCryptoHashType_SHA256, sigbits);
     parcBuffer_Release(&sigbits);
     ccnxContentObject_SetSignature(preSendCO, keyId, signature, NULL);
     parcSignature_Release(&signature);
