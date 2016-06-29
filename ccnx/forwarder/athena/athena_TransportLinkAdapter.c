@@ -495,7 +495,7 @@ _strtoupper(const char *string)
     return upperCaseString;
 }
 
-#define METHOD_PREFIX "athenaTransportLinkModule"
+#define INIT_METHOD_PREFIX "athenaTransportLinkModule"
 #define INIT_METHOD_SUFFIX "_Init"
 
 static const char *
@@ -508,7 +508,7 @@ _moduleNameToInitMethod(const char *moduleName)
     PARCBufferComposer *composer = parcBufferComposer_Create();
     if (composer != NULL) {
         parcBufferComposer_Format(composer, "%s%s%s",
-                                  METHOD_PREFIX, module, INIT_METHOD_SUFFIX);
+                                  INIT_METHOD_PREFIX, module, INIT_METHOD_SUFFIX);
         PARCBuffer *tempBuffer = parcBufferComposer_ProduceBuffer(composer);
         parcBufferComposer_Release(&composer);
 
@@ -567,12 +567,11 @@ _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *
 
     // If not statically linked in, look for a shared library and load it from there
     if (_init == NULL) {
-        // Derive the library name from the longest matching prefix of the provided module name that matches a file
+        // Derive the library name from the longest matching prefix of the provided module name that matches.
         const char *moduleLibrary;
         int moduleNameLength = strlen(moduleName);
-        void *linkModule = NULL;
         do {
-            // drop the last character in the name from each successive iteration
+            // drop the last character in the name in each successive iteration until we find a match.
             char *moduleNameCopy = parcMemory_StringDuplicate(moduleName, moduleNameLength--);
             moduleLibrary = _moduleNameToLibrary(moduleNameCopy);
             parcMemory_Deallocate(&moduleNameCopy);
@@ -580,8 +579,6 @@ _LoadModule(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, const char *
             parcMemory_Deallocate(&moduleLibrary);
         } while ((linkModule == NULL) && moduleNameLength);
 
-        // If the shared library wasn't found, look for the symbol in our existing image.  This
-        // allows a link module to be linked directly into Athena without modifying the forwarder.
         if (linkModule == NULL) {
             parcLog_Error(athenaTransportLinkAdapter_GetLogger(athenaTransportLinkAdapter),
                           "Unable to dlopen %s: %s", moduleName, dlerror());
