@@ -91,6 +91,8 @@ LONGBOW_TEST_FIXTURE(Global)
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModule_GetName);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModule_AddRemoveLink);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModule_SetAddRemoveLinkCallback);
+    LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModule_CreateMessageBuffer);
+    LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModule_GetMessageIoVector);
 }
 
 LONGBOW_TEST_FIXTURE_SETUP(Global)
@@ -238,6 +240,28 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModule_SetAddRemoveLinkCallback)
     athenaTransportLinkModule_SetAddLinkCallback(athenaTransportLinkModule, _addLink, NULL);
     athenaTransportLinkModule_SetRemoveLinkCallback(athenaTransportLinkModule, _removeLink, NULL);
     athenaTransportLinkModule_Destroy(&athenaTransportLinkModule);
+}
+
+LONGBOW_TEST_CASE(Global, athenaTransportLinkModule_CreateMessageBuffer)
+{
+    CCNxName *name = ccnxName_CreateFromCString("ccnx:/local/forwarder/Module");
+    CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+    PARCBuffer *buffer = athenaTransportLinkModule_CreateMessageBuffer(interest);
+    assertNotNull(buffer, "Empty buffer from athenaTransportLinkModule_CreateMessageBuffer");
+    parcBuffer_Release(&buffer);
+    ccnxInterest_Release(&interest);
+}
+
+LONGBOW_TEST_CASE(Global, athenaTransportLinkModule_GetMessageIoVector)
+{
+    CCNxName *name = ccnxName_CreateFromCString("ccnx:/local/forwarder/Module");
+    CCNxInterest *interest = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+    CCNxCodecNetworkBufferIoVec *iovec = athenaTransportLinkModule_GetMessageIoVector(interest);
+    assertNotNull(iovec, "Empty iovec from athenaTransportLinkModule_GetMessageIoVector");
+    ccnxCodecNetworkBufferIoVec_Release(&iovec);
+    ccnxInterest_Release(&interest);
 }
 
 LONGBOW_TEST_FIXTURE(Local)
