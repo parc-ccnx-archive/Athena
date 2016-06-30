@@ -482,240 +482,9 @@ _setSocketOptions(AthenaTransportLinkModule *athenaTransportLinkModule, int fd)
     return 0;
 }
 
-static AthenaTransportLink *
-_TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr *sockaddr)
-{
-    const char *derivedLinkName;
-
-    _TCPLinkData *linkData = _TCPLinkData_Create();
-
-    linkData->fd = socket(sockaddr->sa_family, SOCK_STREAM, 0);
-    if (linkData->fd < 0) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "socket error (%s)", strerror(errno));
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    // Connect to the specified peer
-    linkData->peerAddress = *(struct sockaddr_storage *)sockaddr;
-
-    int result = connect(linkData->fd, (struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress));
-    if (result < 0) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "connect error (%s)", strerror(errno));
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    result = _setSocketOptions(athenaTransportLinkModule, linkData->fd);
-    if (result) {
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    // Retrieve the local endpoint data, used to create the derived name.
-    socklen_t addressLength = sizeof(linkData->myAddress);
-    result = getsockname(linkData->fd, (struct sockaddr *) &linkData->myAddress, &addressLength);
-    if (result != 0) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Failed to obtain endpoint information from getsockname.");
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    derivedLinkName = _createNameFromLinkData(linkData);
-
-    if (linkName == NULL) {
-        linkName = derivedLinkName;
-    }
-
-    AthenaTransportLink *athenaTransportLink = athenaTransportLink_Create(linkName,
-                                                                          _TCPSend,
-                                                                          _TCPReceive,
-                                                                          _TCPClose);
-    if (athenaTransportLink == NULL) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "athenaTransportLink_Create failed");
-        parcMemory_Deallocate(&derivedLinkName);
-        _TCPLinkData_Destroy(&linkData);
-        return athenaTransportLink;
-    }
-
-    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
-    _setConnectLinkState(athenaTransportLink, linkData);
-
-    parcLog_Info(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                 "new link established: Name=\"%s\" (%s)", linkName, derivedLinkName);
-
-    parcMemory_Deallocate(&derivedLinkName);
-    return athenaTransportLink;
-}
-
-static CCNxMetaMessage *
-_TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
-{
-    struct _TCPLinkData *listenerData = athenaTransportLink_GetPrivateData(athenaTransportLink);
-
-    _TCPLinkData *newLinkData = _TCPLinkData_Create();
-
-    // Accept a new tunnel connection.
-    socklen_t addressLength = sizeof(newLinkData->peerAddress);
-    newLinkData->fd = accept(listenerData->fd, (struct sockaddr *) &newLinkData->peerAddress, &addressLength);
-    if (newLinkData->fd == -1) {
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "_TCPReceiveListener accept: %s", strerror(errno));
-        _TCPLinkData_Destroy(&newLinkData);
-        return NULL;
-    }
-
-    // Get the bound local hostname and port.  The listening address may have been wildcarded.
-    getsockname(newLinkData->fd, (struct sockaddr *) &newLinkData->myAddress, &addressLength);
-
-    // Clone a new link from the current listener.
-    const char *derivedLinkName = _createNameFromLinkData(newLinkData);
-    AthenaTransportLink *newTransportLink = athenaTransportLink_Clone(athenaTransportLink,
-                                                                      derivedLinkName,
-                                                                      _TCPSend,
-                                                                      _TCPReceive,
-                                                                      _TCPClose);
-    if (newTransportLink == NULL) {
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
-                      "athenaTransportLink_Clone failed");
-        parcMemory_Deallocate(&derivedLinkName);
-        _TCPLinkData_Destroy(&newLinkData);
-        return NULL;
-    }
-
-    _setConnectLinkState(newTransportLink, newLinkData);
-
-    // Send the new link up to be added.
-    int result = athenaTransportLink_AddLink(athenaTransportLink, newTransportLink);
-    if (result == -1) {
-        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
-                      "athenaTransportLinkModule_AddLink failed: %s", strerror(errno));
-        close(newLinkData->fd);
-        _TCPLinkData_Destroy(&newLinkData);
-        athenaTransportLink_Release(&newTransportLink);
-    } else {
-        parcLog_Info(athenaTransportLink_GetLogger(athenaTransportLink),
-                     "new link accepted by %s: %s %s",
-                     athenaTransportLink_GetName(athenaTransportLink), derivedLinkName,
-                     athenaTransportLink_IsNotLocal(athenaTransportLink) ? "" : "(Local)");
-    }
-
-    parcMemory_Deallocate(&derivedLinkName);
-
-    // Could pass a message back here regarding the new link.
-    return NULL;
-}
-
-static AthenaTransportLink *
-_TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, const char *linkName, struct sockaddr *sockaddr)
-{
-    const char *derivedLinkName;
-
-    _TCPLinkData *linkData = _TCPLinkData_Create();
-
-    linkData->myAddress = *(struct sockaddr_storage *)sockaddr;
-
-    linkData->fd = socket(sockaddr->sa_family, SOCK_STREAM, 0);
-    if (linkData->fd < 0) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "socket error (%s)", strerror(errno));
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    int result = _setSocketOptions(athenaTransportLinkModule, linkData->fd);
-    if (result) {
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    // Set non-blocking flag
-    int flags = fcntl(linkData->fd, F_GETFL, NULL);
-    if (flags < 0) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "fcntl failed to get non-blocking flag (%s)", strerror(errno));
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-    result = fcntl(linkData->fd, F_SETFL, flags | O_NONBLOCK);
-    if (result) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "fcntl failed to set non-blocking flag (%s)", strerror(errno));
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    // bind and listen on requested address
-    result = bind(linkData->fd, (struct sockaddr *) &linkData->myAddress, SOCKADDR_IN_LEN(&linkData->myAddress));
-    if (result) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "bind error (%s)", strerror(errno));
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-    int backlog = _listenerBacklog;
-    result = listen(linkData->fd, backlog);
-    if (result) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "listen error (%s)", strerror(errno));
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return NULL;
-    }
-
-    derivedLinkName = _createNameFromLinkData(linkData);
-
-    if (linkName == NULL) {
-        linkName = derivedLinkName;
-    }
-
-    // Listener doesn't require a send method.  The receive method is used to establish new connections.
-    AthenaTransportLink *athenaTransportLink = athenaTransportLink_Create(linkName,
-                                                                          NULL,
-                                                                          _TCPReceiveListener,
-                                                                          _TCPClose);
-    if (athenaTransportLink == NULL) {
-        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "athenaTransportLink_Create failed");
-        parcMemory_Deallocate(&derivedLinkName);
-        close(linkData->fd);
-        _TCPLinkData_Destroy(&linkData);
-        return athenaTransportLink;
-    }
-
-    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
-    athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
-    athenaTransportLink_SetEventFd(athenaTransportLink, linkData->fd);
-
-    // Links established for listening are not used to route messages.
-    // They can be kept in a listener list that doesn't consume a linkId.
-    athenaTransportLink_SetRoutable(athenaTransportLink, false);
-
-    parcLog_Info(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                 "new listener established: Name=\"%s\" (%s)", linkName, derivedLinkName);
-
-    parcMemory_Deallocate(&derivedLinkName);
-    return athenaTransportLink;
-}
-
-#include <parc/algol/parc_URIAuthority.h>
-
 #define TCP_LISTENER_FLAG "listener"
 #define LINK_NAME_SPECIFIER "name%3D"
 #define LOCAL_LINK_FLAG "local%3D"
-
-typedef struct _URISpecificationParameters {
-    char *linkName;
-    struct sockaddr_storage *destination;
-    bool listener;
-    int forceLocal;
-} _URISpecificationParameters;
 
 static struct sockaddr_storage *
 _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
@@ -757,11 +526,22 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
     return sockaddr;
 }
 
+typedef struct _URISpecificationParameters {
+    char *linkName;
+    const char *derivedLinkName;
+    struct sockaddr_storage *destination;
+    bool listener;
+    int forceLocal;
+} _URISpecificationParameters;
+
 static void
 _URISpecificationParameters_Destroy(_URISpecificationParameters **parameters)
 {
     if ((*parameters)->linkName) {
         parcMemory_Deallocate(&((*parameters)->linkName));
+    }
+    if ((*parameters)->derivedLinkName) {
+        parcMemory_Deallocate(&((*parameters)->derivedLinkName));
     }
     if ((*parameters)->destination) {
         parcMemory_Deallocate(&((*parameters)->destination));
@@ -866,6 +646,227 @@ _URISpecificationParameters_Create(AthenaTransportLinkModule *athenaTransportLin
     }
     return parameters;
 }
+
+static AthenaTransportLink *
+_TCPOpenConnection(AthenaTransportLinkModule *athenaTransportLinkModule, _URISpecificationParameters *parameters)
+{
+    _TCPLinkData *linkData = _TCPLinkData_Create();
+
+    linkData->fd = socket(parameters->destination->ss_family, SOCK_STREAM, 0);
+    if (linkData->fd < 0) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "socket error (%s)", strerror(errno));
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    // Connect to the specified peer
+    linkData->peerAddress = *parameters->destination;
+
+    int result = connect(linkData->fd, (struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress));
+    if (result < 0) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule), "connect error (%s)", strerror(errno));
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    result = _setSocketOptions(athenaTransportLinkModule, linkData->fd);
+    if (result) {
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    // Retrieve the local endpoint data, used to create the derived name.
+    socklen_t addressLength = sizeof(linkData->myAddress);
+    result = getsockname(linkData->fd, (struct sockaddr *) &linkData->myAddress, &addressLength);
+    if (result != 0) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "Failed to obtain endpoint information from getsockname.");
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    parameters->derivedLinkName = _createNameFromLinkData(linkData);
+
+    const char *linkName;
+    if (parameters->linkName == NULL) {
+        linkName = parameters->derivedLinkName;
+    } else {
+        linkName = parameters->linkName;
+    }
+
+    AthenaTransportLink *athenaTransportLink = athenaTransportLink_Create(linkName,
+                                                                          _TCPSend,
+                                                                          _TCPReceive,
+                                                                          _TCPClose);
+    if (athenaTransportLink == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "athenaTransportLink_Create failed");
+        _TCPLinkData_Destroy(&linkData);
+        return athenaTransportLink;
+    }
+
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
+    _setConnectLinkState(athenaTransportLink, linkData);
+
+    parcLog_Info(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                 "new link established: Name=\"%s\" (%s)", parameters->linkName, parameters->derivedLinkName);
+
+    return athenaTransportLink;
+}
+
+static CCNxMetaMessage *
+_TCPReceiveListener(AthenaTransportLink *athenaTransportLink)
+{
+    struct _TCPLinkData *listenerData = athenaTransportLink_GetPrivateData(athenaTransportLink);
+
+    _TCPLinkData *newLinkData = _TCPLinkData_Create();
+
+    // Accept a new tunnel connection.
+    socklen_t addressLength = sizeof(newLinkData->peerAddress);
+    newLinkData->fd = accept(listenerData->fd, (struct sockaddr *) &newLinkData->peerAddress, &addressLength);
+    if (newLinkData->fd == -1) {
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink), "_TCPReceiveListener accept: %s", strerror(errno));
+        _TCPLinkData_Destroy(&newLinkData);
+        return NULL;
+    }
+
+    // Get the bound local hostname and port.  The listening address may have been wildcarded.
+    getsockname(newLinkData->fd, (struct sockaddr *) &newLinkData->myAddress, &addressLength);
+
+    // Clone a new link from the current listener.
+    const char *derivedLinkName = _createNameFromLinkData(newLinkData);
+    AthenaTransportLink *newTransportLink = athenaTransportLink_Clone(athenaTransportLink,
+                                                                      derivedLinkName,
+                                                                      _TCPSend,
+                                                                      _TCPReceive,
+                                                                      _TCPClose);
+    if (newTransportLink == NULL) {
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                      "athenaTransportLink_Clone failed");
+        parcMemory_Deallocate(&derivedLinkName);
+        _TCPLinkData_Destroy(&newLinkData);
+        return NULL;
+    }
+
+    _setConnectLinkState(newTransportLink, newLinkData);
+
+    // Send the new link up to be added.
+    int result = athenaTransportLink_AddLink(athenaTransportLink, newTransportLink);
+    if (result == -1) {
+        parcLog_Error(athenaTransportLink_GetLogger(athenaTransportLink),
+                      "athenaTransportLinkModule_AddLink failed: %s", strerror(errno));
+        close(newLinkData->fd);
+        _TCPLinkData_Destroy(&newLinkData);
+        athenaTransportLink_Release(&newTransportLink);
+    } else {
+        parcLog_Info(athenaTransportLink_GetLogger(athenaTransportLink),
+                     "new link accepted by %s: %s %s",
+                     athenaTransportLink_GetName(athenaTransportLink), derivedLinkName,
+                     athenaTransportLink_IsNotLocal(athenaTransportLink) ? "" : "(Local)");
+    }
+
+    parcMemory_Deallocate(&derivedLinkName);
+
+    // Could pass a message back here regarding the new link.
+    return NULL;
+}
+
+static AthenaTransportLink *
+_TCPOpenListener(AthenaTransportLinkModule *athenaTransportLinkModule, _URISpecificationParameters *parameters)
+{
+    _TCPLinkData *linkData = _TCPLinkData_Create();
+
+    linkData->myAddress = *(struct sockaddr_storage *)parameters->destination;
+
+    linkData->fd = socket(parameters->destination->ss_family, SOCK_STREAM, 0);
+    if (linkData->fd < 0) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "socket error (%s)", strerror(errno));
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    int result = _setSocketOptions(athenaTransportLinkModule, linkData->fd);
+    if (result) {
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    // Set non-blocking flag
+    int flags = fcntl(linkData->fd, F_GETFL, NULL);
+    if (flags < 0) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "fcntl failed to get non-blocking flag (%s)", strerror(errno));
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+    result = fcntl(linkData->fd, F_SETFL, flags | O_NONBLOCK);
+    if (result) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "fcntl failed to set non-blocking flag (%s)", strerror(errno));
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    // bind and listen on requested address
+    result = bind(linkData->fd, (struct sockaddr *) &linkData->myAddress, SOCKADDR_IN_LEN(&linkData->myAddress));
+    if (result) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "bind error (%s)", strerror(errno));
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+    int backlog = _listenerBacklog;
+    result = listen(linkData->fd, backlog);
+    if (result) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "listen error (%s)", strerror(errno));
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return NULL;
+    }
+
+    parameters->derivedLinkName = _createNameFromLinkData(linkData);
+
+    const char *linkName;
+    if (parameters->linkName == NULL) {
+        linkName = parameters->derivedLinkName;
+    } else {
+        linkName = parameters->linkName;
+    }
+
+    // Listener doesn't require a send method.  The receive method is used to establish new connections.
+    AthenaTransportLink *athenaTransportLink = athenaTransportLink_Create(linkName,
+                                                                          NULL,
+                                                                          _TCPReceiveListener,
+                                                                          _TCPClose);
+    if (athenaTransportLink == NULL) {
+        parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                      "athenaTransportLink_Create failed");
+        close(linkData->fd);
+        _TCPLinkData_Destroy(&linkData);
+        return athenaTransportLink;
+    }
+
+    athenaTransportLink_SetLogLevel(athenaTransportLink, parcLog_GetLevel(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule)));
+    athenaTransportLink_SetPrivateData(athenaTransportLink, linkData);
+    athenaTransportLink_SetEventFd(athenaTransportLink, linkData->fd);
+
+    // Links established for listening are not used to route messages.
+    // They can be kept in a listener list that doesn't consume a linkId.
+    athenaTransportLink_SetRoutable(athenaTransportLink, false);
+
+    parcLog_Info(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
+                 "new listener established: Name=\"%s\" (%s)", parameters->linkName, parameters->derivedLinkName);
+
+    return athenaTransportLink;
+}
+
 static AthenaTransportLink *
 _TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connectionURI)
 {
@@ -880,9 +881,9 @@ _TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
     }
 
     if (parameters->listener) {
-        result = _TCPOpenListener(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)parameters->destination);
+        result = _TCPOpenListener(athenaTransportLinkModule, parameters);
     } else {
-        result = _TCPOpenConnection(athenaTransportLinkModule, parameters->linkName, (struct sockaddr *)parameters->destination);
+        result = _TCPOpenConnection(athenaTransportLinkModule, parameters);
     }
 
     // forced IsLocal/IsNotLocal, mainly for testing
