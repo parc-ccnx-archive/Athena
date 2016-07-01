@@ -234,6 +234,11 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP6_OpenClose)
     int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "UDP_1");
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
 
+    connectionURI = parcURI_Parse("udp6://[::0:40000/Listener/name=UDP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad IPv6 address");
+    parcURI_Release(&connectionURI);
+
     athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
 }
 

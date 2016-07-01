@@ -828,7 +828,7 @@ _parseMTU(const char *token, size_t *mtu)
 }
 
 static int
-_parseSrc(AthenaTransportLinkModule *athenaTransportLinkModule, const char *token, struct ether_addr *srcMAC)
+_parseSrc(const char *token, struct ether_addr *srcMAC)
 {
     char srcAddressString[NI_MAXHOST];
     if (sscanf(token, "%*[^%%]%%3D%[^%%]", srcAddressString) != 1) {
@@ -921,7 +921,7 @@ _ETHOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
         }
 
         if (strncasecmp(token, SRC_LINK_SPECIFIER, strlen(SRC_LINK_SPECIFIER)) == 0) {
-            if (_parseSrc(athenaTransportLinkModule, token, &srcMAC) != 0) {
+            if (_parseSrc(token, &srcMAC) != 0) {
                 parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
                               "Improper connection source specification (%s)", token);
                 parcMemory_Deallocate(&token);

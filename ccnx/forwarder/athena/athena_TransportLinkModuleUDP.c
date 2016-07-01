@@ -942,7 +942,10 @@ _getSockaddr(const char *moduleName, const char *hostname, in_port_t port)
         struct addrinfo *ai;
 
         if (hostname[0] == '[') {
-            assertTrue(hostname[strlen(hostname) - 1] == ']', "Malformed IPv6 hostname");
+            if (hostname[strlen(hostname) - 1] != ']') {
+                errno = EINVAL;
+                return sockaddr;
+            }
             hostname = parcMemory_StringDuplicate(hostname + 1, strlen(hostname) - 2);
         } else {
             hostname = parcMemory_StringDuplicate(hostname, strlen(hostname));
