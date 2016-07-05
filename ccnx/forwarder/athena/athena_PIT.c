@@ -506,9 +506,10 @@ _athenaPIT_AddLifetimeStat(AthenaPIT *pit, time_t latencyEntry)
     pit->latencySum -= pit->latencyArray[pit->latencyArrayIndex];
     pit->latencyArray[pit->latencyArrayIndex] = latencyEntry;
     pit->latencySum += pit->latencyArray[pit->latencyArrayIndex];
-    pit->latencyArrayIndex = (++pit->latencyArrayIndex) % LATENCY_ARRAY_SIZE;
+    pit->latencyArrayIndex++;
+    pit->latencyArrayIndex %= LATENCY_ARRAY_SIZE;
     if (pit->latencyArrayCount < LATENCY_ARRAY_SIZE) {
-        ++pit->latencyArrayCount;
+        pit->latencyArrayCount++;
     }
 }
 

@@ -472,6 +472,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_RemoveInterest)
     PARCBitVector *expectedReturnVector;
     AthenaPITResolution addResult =
         athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult != AthenaPITResolution_Error, "athenaPIT_AddInterest failed");
     assertNotNull(expectedReturnVector, "Expected a return vector to be created");
     size_t interestCount = athenaPIT_GetNumberOfPendingInterests(data->testPIT);
     assertTrue(interestCount == 1, "Expect there to be 1 interest");
@@ -504,9 +505,11 @@ LONGBOW_TEST_CASE(Global, athenaPIT_RemoveInterest)
 
     addResult =
         athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult != AthenaPITResolution_Error, "athenaPIT_AddInterest failed");
 
     addResult =
         athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector2, &expectedReturnVector);
+    assertTrue(addResult != AthenaPITResolution_Error, "athenaPIT_AddInterest failed");
     interestCount = athenaPIT_GetNumberOfPendingInterests(data->testPIT);
     assertTrue(interestCount == 2, "Expect there to be 2 interest");
 
@@ -803,6 +806,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_RemoveLink)
     PARCBitVector *expectedReturnVector;
     AthenaPITResolution addResult =
         athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector2, &expectedReturnVector);
+    assertTrue(addResult != AthenaPITResolution_Error, "athenaPIT_AddInterest failed");
     assertTrue(athenaPIT_RemoveLink(data->testPIT, data->testVector1), "Expected True result from RemoveLink()");
     assertTrue(athenaPIT_RemoveLink(data->testPIT, data->testVector2), "Expected True result from RemoveLink()");
 
@@ -978,6 +982,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_GetMeanEntryLifetime)
     PARCBitVector *expectedReturnVector;
     AthenaPITResolution addResult =
         athenaPIT_AddInterest(data->testPIT, data->testInterest1, data->testVector1, &expectedReturnVector);
+    assertTrue(addResult != AthenaPITResolution_Error, "athenaPIT_AddInterest failed");
 
     // Test lifetime
     _TestClockTimeval.tv_usec += 50 * 1000;
