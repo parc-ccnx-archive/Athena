@@ -625,6 +625,12 @@ const char *
 athenaTransportLinkAdapter_Open(AthenaTransportLinkAdapter *athenaTransportLinkAdapter, PARCURI *connectionURI)
 {
     AthenaTransportLinkModule *athenaTransportLinkModule;
+
+    if (connectionURI == NULL) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     const char *moduleName = parcURI_GetScheme(connectionURI);
 
     if (moduleName == NULL) {
