@@ -193,7 +193,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP6_OpenClose)
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
     parcURI_Release(&connectionURI);
 
-    connectionURI = parcURI_Parse("tcp6://localhost:40000/Listener/name=TCP_1");
+    connectionURI = parcURI_Parse("tcp6://[::]:40000/Listener/name=TCP_1");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);

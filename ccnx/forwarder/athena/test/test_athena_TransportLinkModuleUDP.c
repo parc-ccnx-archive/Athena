@@ -221,12 +221,12 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleUDP6_OpenClose)
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
     parcURI_Release(&connectionURI);
 
-    connectionURI = parcURI_Parse("udp6://localhost:40000/Listener/name=UDP_1");
+    connectionURI = parcURI_Parse("udp6://[::1]:40000/Listener/name=UDP_1");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
-    connectionURI = parcURI_Parse("udp6://localhost:40000/Listener/name=UDP_1");
+    connectionURI = parcURI_Parse("udp6://:40000/Listener/name=UDP_1");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded in opening a duplicate link");
     parcURI_Release(&connectionURI);
