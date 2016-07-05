@@ -158,6 +158,12 @@ _UDPLinkData_Destroy(_UDPLinkData **linkData)
     parcMemory_Deallocate(linkData);
 }
 
+#ifdef SIN6_LEN
+#define SOCKADDR_IN_LEN(s) (socklen_t)(((struct sockaddr *)s)->sa_len)
+#else
+#define SOCKADDR_IN_LEN(s) (socklen_t)((((struct sockaddr_in *)s)->sin_family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6))
+#endif
+
 /**
  * @abstract create link name based on connection information
  * @discussion
@@ -172,9 +178,6 @@ _UDPLinkData_Destroy(_UDPLinkData **linkData)
  * }
  * @endcode
  */
-#define SOCKADDR_IN_LEN(s) (socklen_t)((((struct sockaddr_in *)s)->sin_family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6))
-#define SOCKADDR_LEN(s) (socklen_t)sizeof(struct sockaddr)
-
 static const char *
 _createNameFromLinkData(const _connectionPair *linkData)
 {
@@ -188,9 +191,8 @@ _createNameFromLinkData(const _connectionPair *linkData)
 
     // Get our peer's hostname and port
     char peerHost[NI_MAXHOST], peerPort[NI_MAXSERV];
-    int peerResult = 0;
-    peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress),
-                             peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
+    int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress),
+                                 peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
 
     protocol = (linkData->myAddress.ss_family == AF_INET6) ? UDP6_SCHEME : UDP_SCHEME;
     if ((peerResult == 0) && (myResult == 0)) { // point to point connection
@@ -1150,8 +1152,10 @@ _UDPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
     _URISpecificationParameters *parameters = _URISpecificationParameters_Create(athenaTransportLinkModule, connectionURI);
     if (parameters == NULL) {
+        char *connectionURIstring = parcURI_ToString(connectionURI);
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to parse connection URI specification (%s)", connectionURI);
+                      "Unable to parse connection URI specification (%s)", connectionURIstring);
+        parcMemory_Deallocate(&connectionURIstring);
         errno = EINVAL;
         return NULL;
     }

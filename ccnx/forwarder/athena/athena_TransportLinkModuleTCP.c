@@ -131,15 +131,17 @@ _TCPLinkData_Destroy(_TCPLinkData **linkData)
     parcMemory_Deallocate(linkData);
 }
 
+#ifdef SIN6_LEN
+#define SOCKADDR_IN_LEN(s) (socklen_t)(((struct sockaddr *)s)->sa_len)
+#else
 #define SOCKADDR_IN_LEN(s) (socklen_t)((((struct sockaddr_in *)s)->sin_family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6))
-#define SOCKADDR_LEN(s) (socklen_t)sizeof(struct sockaddr)
+#endif
 
 /**
- * @abstract create link name based on file descriptor
+ * @abstract create link name based on connection information
  * @discussion
  *
- * @param [in] type of connection
- * @param [in] fd file descriptor
+ * @param [in] linkData connection information
  * @return allocated name, must be released with parcMemory_Deallocate()
  *
  * Example:
@@ -160,16 +162,30 @@ _createNameFromLinkData(const _TCPLinkData *linkData)
     int myResult = getnameinfo((struct sockaddr *) &linkData->myAddress, SOCKADDR_IN_LEN(&linkData->myAddress),
                                myHost, NI_MAXHOST, myPort, NI_MAXSERV, NI_NUMERICSERV);
 
-    protocol = (linkData->myAddress.ss_family == AF_INET6) ? TCP6_SCHEME : TCP_SCHEME;
     // Get our peer's hostname and port
     char peerHost[NI_MAXHOST], peerPort[NI_MAXSERV];
     int peerResult = getnameinfo((struct sockaddr *) &linkData->peerAddress, SOCKADDR_IN_LEN(&linkData->peerAddress),
                                  peerHost, NI_MAXHOST, peerPort, NI_MAXSERV, NI_NUMERICSERV);
 
+    protocol = (linkData->myAddress.ss_family == AF_INET6) ? TCP6_SCHEME : TCP_SCHEME;
     if ((peerResult == 0) && (myResult == 0)) { // point to point connection
-        sprintf(nameBuffer, "%s://%s:%s<->%s:%s", protocol, myHost, myPort, peerHost, peerPort);
+        if (strchr(myHost, ':')) {
+            if (strchr(peerHost, ':')) {
+                sprintf(nameBuffer, "%s://[%s]:%s<->[%s]:%s", protocol, myHost, myPort, peerHost, peerPort);
+            } else {
+                sprintf(nameBuffer, "%s://[%s]:%s<->%s:%s", protocol, myHost, myPort, peerHost, peerPort);
+            }
+        } else if (strchr(peerHost, ':')) {
+            sprintf(nameBuffer, "%s://%s:%s<->[%s]:%s", protocol, myHost, myPort, peerHost, peerPort);
+        } else {
+            sprintf(nameBuffer, "%s://%s:%s<->%s:%s", protocol, myHost, myPort, peerHost, peerPort);
+        }
     } else if (myResult == 0) { // listener only
-        sprintf(nameBuffer, "%s://%s:%s", protocol, myHost, myPort);
+        if (strchr(myHost, ':')) {
+            sprintf(nameBuffer, "%s://[%s]:%s", protocol, myHost, myPort);
+        } else {
+            sprintf(nameBuffer, "%s://%s:%s", protocol, myHost, myPort);
+        }
     } else { // some unknown possibility
         sprintf(nameBuffer, "%s://Unknown", protocol);
     }
@@ -878,8 +894,10 @@ _TCPOpen(AthenaTransportLinkModule *athenaTransportLinkModule, PARCURI *connecti
 
     _URISpecificationParameters *parameters = _URISpecificationParameters_Create(athenaTransportLinkModule, connectionURI);
     if (parameters == NULL) {
+        char *connectionURIstring = parcURI_ToString(connectionURI);
         parcLog_Error(athenaTransportLinkModule_GetLogger(athenaTransportLinkModule),
-                      "Unable to parse connection URI specification (%s)", connectionURI);
+                      "Unable to parse connection URI specification (%s)", connectionURIstring);
+        parcMemory_Deallocate(&connectionURIstring);
         errno = EINVAL;
         return NULL;
     }
