@@ -86,7 +86,7 @@ typedef PARCBuffer *(AthenaFragmenter_ReceiveFragment)(AthenaFragmenter *athenaF
  * @typedef AthenaFragmenter_Init
  * @brief Fragmenter initialization method
  */
-typedef AthenaFragmenter *(AthenaFragmenter_Init)(AthenaFragmenter *athenaFragmenter);
+typedef AthenaFragmenter *(*AthenaFragmenter_Init)(AthenaFragmenter *athenaFragmenter);
 
 /**
  * @typedef AthenaFragmenter_Init
@@ -100,7 +100,6 @@ typedef void (AthenaFragmenter_Fini)(AthenaFragmenter *athenaFragmenter);
 struct AthenaFragmenter {
     AthenaTransportLink *athenaTransportLink; // link associated with fragmenter
     const char *moduleName;
-    void *module; // so library can be unloaded
     AthenaFragmenter_CreateFragment *createFragment;
     AthenaFragmenter_ReceiveFragment *receiveFragment;
     AthenaFragmenter_Fini *fini;

@@ -441,11 +441,14 @@ _athenaFragmenter_BEFS_Fini(AthenaFragmenter *athenaFragmenter)
 AthenaFragmenter *
 athenaFragmenter_BEFS_Init(AthenaFragmenter *athenaFragmenter)
 {
-    parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
-                  "Creating BEFS fragmenter");
-    athenaFragmenter->fragmenterData = _BEFS_CreateFragmenterData();
-    athenaFragmenter->createFragment = (AthenaFragmenter_CreateFragment *)_BEFS_CreateFragment;
-    athenaFragmenter->receiveFragment = (AthenaFragmenter_ReceiveFragment *)_BEFS_ReceiveAndReassemble;
-    athenaFragmenter->fini = (AthenaFragmenter_Fini *)_athenaFragmenter_BEFS_Fini;
+    assertNotNull(athenaFragmenter, "athenaFragmenter_BEFS_Init called with NULL instance data");
+    if (athenaFragmenter != NULL) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                      "Creating BEFS fragmenter");
+        athenaFragmenter->fragmenterData = _BEFS_CreateFragmenterData();
+        athenaFragmenter->createFragment = (AthenaFragmenter_CreateFragment *)_BEFS_CreateFragment;
+        athenaFragmenter->receiveFragment = (AthenaFragmenter_ReceiveFragment *)_BEFS_ReceiveAndReassemble;
+        athenaFragmenter->fini = (AthenaFragmenter_Fini *)_athenaFragmenter_BEFS_Fini;
+    }
     return athenaFragmenter;
 }

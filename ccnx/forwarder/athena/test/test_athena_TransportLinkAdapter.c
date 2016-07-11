@@ -144,6 +144,9 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkAdapter_OpenPollClose)
 
     _LoadModule(athenaTransportLinkAdapter, "TCP");
 
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, NULL);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded for NULL URI");
+
     connectionURI = parcURI_Parse("unknown://127.0.0.1:50200/name=TCP_0");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded for Unknown module");

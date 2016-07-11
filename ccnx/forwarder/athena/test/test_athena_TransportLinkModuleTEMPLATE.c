@@ -130,6 +130,9 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTEMPLATE_OpenClose)
 
     athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, NULL);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad URI argument");
+
     sprintf(linkSpecificationURI, "template:///name=");
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -141,6 +144,24 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTEMPLATE_OpenClose)
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad local argument");
     parcURI_Release(&connectionURI);
+
+    sprintf(linkSpecificationURI, "template:///local=true");
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed to read true local argument");
+    parcURI_Release(&connectionURI);
+
+    int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, result);
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
+
+    sprintf(linkSpecificationURI, "template:///local=false");
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed to read false local argument");
+    parcURI_Release(&connectionURI);
+
+    closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, result);
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
 
     sprintf(linkSpecificationURI, "template:///nameo=");
     connectionURI = parcURI_Parse(linkSpecificationURI);
@@ -160,7 +181,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTEMPLATE_OpenClose)
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded in opening a duplicate link");
     parcURI_Release(&connectionURI);
 
-    int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "TEMPLATE_1");
+    closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "TEMPLATE_1");
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
 
     athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
@@ -218,8 +239,13 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTEMPLATE_SendReceive)
 
     // Receive the duplicate
     ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    assertTrue(ccnxMetaMessage != NULL, "athenaTransportLinkAdapter_Receive failed to receive duplicate message");
     parcBitVector_Release(&resultVector);
     ccnxMetaMessage_Release(&ccnxMetaMessage);
+
+    // Nothing else should remain
+    ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 0);
+    assertTrue(ccnxMetaMessage == NULL, "athenaTransportLinkAdapter_Receive received extraneous message");
 
     int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "TEMPLATE_1");
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));

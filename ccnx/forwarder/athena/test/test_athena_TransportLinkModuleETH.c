@@ -96,6 +96,7 @@ LONGBOW_TEST_FIXTURE(Global)
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments);
+    LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleETH_StringToEtherAddress);
 }
 
 LONGBOW_TEST_FIXTURE_SETUP(Global)
@@ -167,6 +168,12 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose)
 
     athenaTransportLinkAdapter_SetLogLevel(athenaTransportLinkAdapter, PARCLogLevel_Debug);
 
+    sprintf(linkSpecificationURI, "eth://");
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad authority");
+    parcURI_Release(&connectionURI);
+
     sprintf(linkSpecificationURI, "eth://%s/name=", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
@@ -209,7 +216,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose)
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETH_1/local=false", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
 
@@ -222,7 +229,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_OpenClose)
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETH_1", device);
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETH_1/local=true/src=00:00:00:00:00:00", device);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded in opening a duplicate link");
@@ -265,6 +272,12 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceive)
         return;
     }
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    sprintf(linkSpecificationURI, "eth://%s/name=ETH_1/mtu=zu", device);
+    connectionURI = parcURI_Parse(linkSpecificationURI);
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open improper mtu specification succeeded");
     parcURI_Release(&connectionURI);
 
     size_t mtu = 1500; // forced MTU size to detect large messages
@@ -378,7 +391,7 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
 
     size_t mtu = 1500; // forced MTU size for fragmentation
 
-    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=XXXX/mtu=%zu", device, mtu);
+    sprintf(linkSpecificationURI, "eth://%s/Listener/name=ETHListener/fragmenter=/mtu=%zu", device, mtu);
     connectionURI = parcURI_Parse(linkSpecificationURI);
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad fragmenter");
@@ -490,6 +503,28 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_SendReceiveFragments)
     assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
 
     athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
+}
+
+LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleETH_StringToEtherAddress)
+{
+    struct ether_addr etherAddress;
+    int result = 0;
+    const char *goodAddress = ":01:02:f0:ee:cc:d2";
+    const char *shortAddress = ":02:f0:ee:cc:d2";
+    const char *longAddress = ":01:02:f0:ee:cc:d2:11";
+    const char *badAddress = ":gg:02:f0:ee:cc:d2";
+    const char *srcAddress = SRC_LINK_SPECIFIER "01:02:f0:ee:cc:d2";
+
+    result = _parseAddress(goodAddress, &etherAddress);
+    assertTrue(result == 0, "_parseAddress failed");
+    result = _parseAddress(shortAddress, &etherAddress);
+    assertTrue(result != 0, "_parseAddress succeeded in parsing short address");
+    result = _parseAddress(longAddress, &etherAddress);
+    assertTrue(result == 0, "_parseAddress failed");
+    result = _parseAddress(badAddress, &etherAddress);
+    assertTrue(result != 0, "_parseAddress succeeded in parsing bad address");
+    result = _parseSrc(srcAddress, &etherAddress);
+    assertTrue(result == 0, "_parseSrc failed");
 }
 
 LONGBOW_TEST_FIXTURE(Local)
