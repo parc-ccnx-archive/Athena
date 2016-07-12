@@ -216,8 +216,19 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
             if (nameList == NULL) {
                 nameList = parcList(parcArrayList_Create((void (*)(void **))ccnxName_Release), PARCArrayListAsPARCList);
                 parcList_SetAtIndex(athenaFIB->listOfLinks, bit, (PARCObject *) nameList);
+                parcList_Add(nameList, (PARCObject *) ccnxName_Acquire(ccnxName));
+            } else {
+                bool found = false;
+                for (int j = 0; j < parcList_Size(nameList); ++j) {
+                    CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, j);
+                    if (ccnxName_Equals(ccnxName, key)) {
+                        found = true;
+                    }
+                }
+                if (!found) {
+                    parcList_Add(nameList, (PARCObject *) ccnxName_Acquire(ccnxName));
+                }
             }
-            parcList_Add(nameList, (PARCObject *) ccnxName_Acquire(ccnxName));
         }
 
         // Now add the actual fib mapping
