@@ -219,7 +219,7 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
                 parcList_Add(nameList, (PARCObject *) ccnxName_Acquire(ccnxName));
             } else {
                 bool found = false;
-                for (int j = 0; j < parcList_Size(nameList); ++j) {
+                for (int j = 0; (j < parcList_Size(nameList)) && !found; ++j) {
                     CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, j);
                     if (ccnxName_Equals(ccnxName, key)) {
                         found = true;
