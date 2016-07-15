@@ -253,11 +253,27 @@ athenaFIB_DeleteRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARC
 
     PARCBitVector *linkV = athenaFIB_Lookup(athenaFIB, ccnxName, NULL);
     if (linkV != NULL) {
-        parcBitVector_ClearVector(linkV, ccnxLinkVector);
-        if (parcBitVector_NumberOfBitsSet(linkV) == 0) {
-            parcHashMap_Remove(athenaFIB->tableByName, (PARCObject *) ccnxName);
+        if (parcBitVector_Contains(linkV, ccnxLinkVector)) {
+            parcBitVector_ClearVector(linkV, ccnxLinkVector);
+            if (parcBitVector_NumberOfBitsSet(linkV) == 0) {
+                parcHashMap_Remove(athenaFIB->tableByName, (PARCObject *) ccnxName);
+            }
+            int bit = 0;
+            while ((bit = parcBitVector_NextBitSet(ccnxLinkVector, bit)) >= 0) {
+                PARCList *nameList = parcList_GetAtIndex((PARCList *) athenaFIB->listOfLinks, bit);
+                if (nameList) {
+                    for (int j = 0; j < parcList_Size(nameList); ++j) {
+                        CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, j);
+                        if (ccnxName_Equals(ccnxName, key)) {
+                            parcList_RemoveAtIndex(nameList, j);
+                            break;
+                        }
+                    }
+                }
+                bit++;
+            }
+            result = true;
         }
-        result = true;
         parcBitVector_Release(&linkV);
     }
 
