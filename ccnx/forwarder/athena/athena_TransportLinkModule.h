@@ -63,7 +63,6 @@
 #include <parc/algol/parc_ArrayList.h>
 #include <parc/algol/parc_FileOutputStream.h>
 #include <parc/logging/parc_Log.h>
-#include <parc/logging/parc_LogReporterFile.h>
 
 #include <ccnx/forwarder/athena/athena_TransportLink.h>
 

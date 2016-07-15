@@ -77,15 +77,12 @@
 #include <ccnx/common/validation/ccnxValidation_CRC32C.h>
 #include <ccnx/common/codec/ccnxCodec_TlvPacket.h>
 
+#include <parc/logging/parc_LogReporterTextStdout.h>
+
 static PARCLog *
 _athena_logger_create(void)
 {
-    PARCFileOutputStream *fileOutput = parcFileOutputStream_Create(dup(STDOUT_FILENO));
-    PARCOutputStream *output = parcFileOutputStream_AsOutputStream(fileOutput);
-    parcFileOutputStream_Release(&fileOutput);
-
-    PARCLogReporter *reporter = parcLogReporterFile_Create(output);
-    parcOutputStream_Release(&output);
+    PARCLogReporter *reporter = parcLogReporterTextStdout_Create();
 
     PARCLog *log = parcLog_Create("localhost", "athena", NULL, reporter);
     parcLogReporter_Release(&reporter);

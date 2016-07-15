@@ -66,6 +66,8 @@
 
 #include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
+#include <parc/logging/parc_LogReporterTextStdout.h>
+
 
 /**
  * @typedef AthenaTransportLinkModule
@@ -89,13 +91,7 @@ struct AthenaTransportLinkModule {
 static PARCLog *
 _parc_logger_create(const char *name)
 {
-    PARCFileOutputStream *fileOutput = parcFileOutputStream_Create(dup(STDOUT_FILENO));
-    PARCOutputStream *output = parcFileOutputStream_AsOutputStream(fileOutput);
-    parcFileOutputStream_Release(&fileOutput);
-
-    PARCLogReporter *reporter = parcLogReporterFile_Create(output);
-    parcOutputStream_Release(&output);
-
+    PARCLogReporter *reporter = parcLogReporterTextStdout_Create();
     PARCLog *log = parcLog_Create("localhost", "athenaTransportLinkModule", name, reporter);
     parcLogReporter_Release(&reporter);
 

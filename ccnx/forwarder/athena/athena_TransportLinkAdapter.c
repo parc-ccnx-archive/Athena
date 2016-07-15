@@ -112,6 +112,9 @@
 #include <ccnx/forwarder/athena/athena.h>
 #include <ccnx/forwarder/athena/athena_TransportLinkAdapter.h>
 
+#include <parc/logging/parc_LogReporterTextStdout.h>
+
+
 typedef PARCArrayList *(*ModuleInit)(void);
 
 /**
@@ -184,13 +187,7 @@ athenaTransportLinkAdapter_GetLogger(AthenaTransportLinkAdapter *athenaTransport
 static PARCLog *
 _parc_logger_create(void)
 {
-    PARCFileOutputStream *fileOutput = parcFileOutputStream_Create(dup(STDOUT_FILENO));
-    PARCOutputStream *output = parcFileOutputStream_AsOutputStream(fileOutput);
-    parcFileOutputStream_Release(&fileOutput);
-
-    PARCLogReporter *reporter = parcLogReporterFile_Create(output);
-    parcOutputStream_Release(&output);
-
+    PARCLogReporter *reporter = parcLogReporterTextStdout_Create();
     PARCLog *log = parcLog_Create("localhost", "athenaTransportLinkAdapter", NULL, reporter);
     parcLogReporter_Release(&reporter);
 
