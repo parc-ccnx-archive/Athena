@@ -142,18 +142,12 @@ _getInterfaceByName(void)
 
 #include <parc/algol/parc_FileOutputStream.h>
 #include <parc/logging/parc_Log.h>
-#include <parc/logging/parc_LogReporterFile.h>
+#include <parc/logging/parc_LogReporterTextStdout.h>
 
 static PARCLog *
 _parc_logger_create(void)
 {
-    PARCFileOutputStream *fileOutput = parcFileOutputStream_Create(dup(STDOUT_FILENO));
-    PARCOutputStream *output = parcFileOutputStream_AsOutputStream(fileOutput);
-    parcFileOutputStream_Release(&fileOutput);
-
-    PARCLogReporter *reporter = parcLogReporterFile_Create(output);
-    parcOutputStream_Release(&output);
-
+    PARCLogReporter *reporter = parcLogReporterTextStdout_Create();
     PARCLog *log = parcLog_Create("localhost", "athenaEthernet", NULL, reporter);
     parcLogReporter_Release(&reporter);
 

@@ -66,7 +66,6 @@ typedef struct AthenaTransportLinkAdapter AthenaTransportLinkAdapter;
 #include <ccnx/transport/common/transport_MetaMessage.h>
 #include <parc/algol/parc_FileOutputStream.h>
 #include <parc/logging/parc_Log.h>
-#include <parc/logging/parc_LogReporterFile.h>
 #include <parc/algol/parc_URI.h>
 
 #include <ccnx/forwarder/athena/athena_TransportLinkModule.h>
