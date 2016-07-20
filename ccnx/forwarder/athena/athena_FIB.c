@@ -249,7 +249,13 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
     return true;
 }
 
-#if unused
+// This method is currently unused, but is available for integration along with *AndVector (see issue 4050)
+#ifdef __GNUC__
+__attribute__ ((unused))
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 static PARCBitVector *
 _parcBitVector_OrVector(const PARCBitVector *first, const PARCBitVector *second)
 {
@@ -268,6 +274,8 @@ _parcBitVector_OrVector(const PARCBitVector *first, const PARCBitVector *second)
 
     return result;
 }
+#ifndef __GNUC__
+#pragma GCC diagnostic pop
 #endif
 
 static PARCBitVector *
