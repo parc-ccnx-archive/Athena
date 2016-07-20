@@ -147,9 +147,6 @@ _destroy(AthenaFragmenter **athenaFragmenter)
     if ((*athenaFragmenter)->fini) {
         (*athenaFragmenter)->fini(*athenaFragmenter);
     }
-    if ((*athenaFragmenter)->module) {
-        dlclose((*athenaFragmenter)->module);
-    }
     parcMemory_Deallocate(&((*athenaFragmenter)->moduleName));
     athenaTransportLink_Release(&((*athenaFragmenter)->athenaTransportLink));
 }
@@ -164,22 +161,32 @@ athenaFragmenter_Create(AthenaTransportLink *athenaTransportLink, const char *fr
     athenaFragmenter->moduleName = parcMemory_StringDuplicate(fragmenterName, strlen(fragmenterName));
 
     athenaFragmenter->athenaTransportLink = athenaTransportLink_Acquire(athenaTransportLink);
-    const char *moduleLibrary = _nameToLibrary(fragmenterName);
-    athenaFragmenter->module = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
-    parcMemory_Deallocate(&moduleLibrary);
-
-    if (athenaFragmenter->module == NULL) {
-        athenaFragmenter_Release(&athenaFragmenter);
-        errno = ENOENT;
-        return NULL;
-    }
-
     const char *initEntry = _nameToInitMethod(fragmenterName);
-    AthenaFragmenter_Init *_init = dlsym(athenaFragmenter->module, initEntry);
+
+    // Check to see if the module is already linked in.
+    void *linkModule = RTLD_DEFAULT;
+    AthenaFragmenter_Init _init = dlsym(linkModule, initEntry);
+
+    if (_init == NULL) {
+        const char *moduleLibrary = _nameToLibrary(fragmenterName);
+        linkModule = dlopen(moduleLibrary, RTLD_NOW | RTLD_GLOBAL);
+        parcMemory_Deallocate(&moduleLibrary);
+
+        if (linkModule == NULL) {
+            athenaFragmenter_Release(&athenaFragmenter);
+            parcMemory_Deallocate(&initEntry);
+            errno = ENOENT;
+            return NULL;
+        }
+       _init = dlsym(linkModule, initEntry);
+    }
     parcMemory_Deallocate(&initEntry);
 
     if (_init == NULL) {
         athenaFragmenter_Release(&athenaFragmenter);
+        if (linkModule != RTLD_DEFAULT) {
+            dlclose(linkModule);
+        }
         errno = EFAULT;
         return NULL;
     }

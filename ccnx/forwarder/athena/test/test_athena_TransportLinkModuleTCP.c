@@ -85,7 +85,9 @@ LONGBOW_TEST_RUNNER_TEARDOWN(athena_TransportLinkModuleTCP)
 LONGBOW_TEST_FIXTURE(Global)
 {
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleTCP_OpenClose);
+    LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleTCP6_OpenClose);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleTCP_SendReceive);
+    LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleTCP6_SendReceive);
     LONGBOW_RUN_TEST_CASE(Global, athenaTransportLinkModuleTCP_Local);
 }
 
@@ -159,6 +161,59 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP_OpenClose)
     athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
 }
 
+LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP6_OpenClose)
+{
+    PARCURI *connectionURI;
+    const char *result;
+    AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
+    assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    connectionURI = parcURI_Parse("tcp6://xxxx/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://localhost/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad address specification");
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://localhost:40000/Listene/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad argument");
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://localhost:40000/Listener/nameo=");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://localhost:40000/Listener/name=");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad name specification");
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://[::]:40000/Listener/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://localhost:40000/Listener/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open succeeded in opening a duplicate link");
+    parcURI_Release(&connectionURI);
+
+    int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "TCP_1");
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
+
+    connectionURI = parcURI_Parse("tcp6://[::0:40000/Listener/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result == NULL, "athenaTransportLinkAdapter_Open failed to detect bad IPv6 address");
+    parcURI_Release(&connectionURI);
+
+    athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
+}
+
 LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP_SendReceive)
 {
     PARCURI *connectionURI;
@@ -172,6 +227,64 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP_SendReceive)
     parcURI_Release(&connectionURI);
 
     connectionURI = parcURI_Parse("tcp://127.0.0.1:40000/name=TCP_1");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    athenaTransportLinkAdapter_Poll(athenaTransportLinkAdapter, 0);
+
+    CCNxName *name = ccnxName_CreateFromCString("lci:/foo/bar");
+    CCNxMetaMessage *ccnxMetaMessage = ccnxInterest_CreateSimple(name);
+    ccnxName_Release(&name);
+
+    PARCBitVector *sendVector = parcBitVector_Create();
+
+    int linkId = athenaTransportLinkAdapter_LinkNameToId(athenaTransportLinkAdapter, "TCP_1");
+    parcBitVector_Set(sendVector, linkId);
+
+    athena_EncodeMessage(ccnxMetaMessage);
+
+    PARCBitVector *resultVector;
+    resultVector = athenaTransportLinkAdapter_Send(athenaTransportLinkAdapter, ccnxMetaMessage, sendVector);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Send failed");
+    ccnxMetaMessage_Release(&ccnxMetaMessage);
+    parcBitVector_Release(&sendVector);
+
+    usleep(1000);
+
+    ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, -1);
+    assertNotNull(resultVector, "athenaTransportLinkAdapter_Receive failed");
+    assertTrue(parcBitVector_NumberOfBitsSet(resultVector) == 1, "athenaTransportLinkAdapter_Receive return message with more than one ingress link");
+    assertNotNull(ccnxMetaMessage, "athenaTransportLinkAdapter_Receive failed to provide message");
+    parcBitVector_Release(&resultVector);
+    ccnxMetaMessage_Release(&ccnxMetaMessage);
+
+    // Close one end of the connection and send a message from the other.
+    int closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "TCPListener");
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
+
+    ccnxMetaMessage = athenaTransportLinkAdapter_Receive(athenaTransportLinkAdapter, &resultVector, 1);
+    assertNull(resultVector, "athenaTransportLinkAdapter_Receive should have failed");
+
+    closeResult = athenaTransportLinkAdapter_CloseByName(athenaTransportLinkAdapter, "TCP_1");
+    assertTrue(closeResult == 0, "athenaTransportLinkAdapter_CloseByName failed (%s)", strerror(errno));
+
+    athenaTransportLinkAdapter_Destroy(&athenaTransportLinkAdapter);
+}
+
+LONGBOW_TEST_CASE(Global, athenaTransportLinkModuleTCP6_SendReceive)
+{
+    PARCURI *connectionURI;
+    const char *result;
+    AthenaTransportLinkAdapter *athenaTransportLinkAdapter = athenaTransportLinkAdapter_Create(_removeLink, NULL);
+    assertNotNull(athenaTransportLinkAdapter, "athenaTransportLinkAdapter_Create returned NULL");
+
+    connectionURI = parcURI_Parse("tcp6://localhost:40000/Listener/name=TCPListener");
+    result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
+    assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
+    parcURI_Release(&connectionURI);
+
+    connectionURI = parcURI_Parse("tcp6://localhost:40000/name=TCP_1");
     result = athenaTransportLinkAdapter_Open(athenaTransportLinkAdapter, connectionURI);
     assertTrue(result != NULL, "athenaTransportLinkAdapter_Open failed (%s)", strerror(errno));
     parcURI_Release(&connectionURI);
