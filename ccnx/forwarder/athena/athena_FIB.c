@@ -58,6 +58,8 @@
  */
 #include <config.h>
 
+#include <stdio.h>
+
 #include <ccnx/forwarder/athena/athena.h>
 #include <parc/algol/parc_BitVector.h>
 #include <parc/algol/parc_HashMap.h>
@@ -189,7 +191,7 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
 {
     PARCBitVector *linkV = NULL;
 
-    // Check if the is a mapping for the default route
+    // Check if this is a mapping for the default route
     if (ccnxName_GetSegmentCount(ccnxName) == 1) {
         CCNxNameSegment *segment = ccnxName_GetSegment(ccnxName, 0);
         if ((ccnxNameSegment_GetType(segment) == CCNxNameLabelType_NAME) &&
@@ -218,6 +220,7 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
                 parcList_SetAtIndex(athenaFIB->listOfLinks, bit, (PARCObject *) nameList);
                 parcList_Add(nameList, (PARCObject *) ccnxName_Acquire(ccnxName));
             } else {
+                // Make sure the entry is only added once to the list
                 bool found = false;
                 for (int j = 0; (j < parcList_Size(nameList)) && !found; ++j) {
                     CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, j);
@@ -246,34 +249,97 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
     return true;
 }
 
+#if unused
+static PARCBitVector *
+_parcBitVector_OrVector(const PARCBitVector *first, const PARCBitVector *second)
+{
+    PARCBitVector *result = parcBitVector_Create();
+
+    if (first != NULL) {
+        for (int bit = 0; (bit = parcBitVector_NextBitSet(first, bit)) >= 0; bit++) {
+            parcBitVector_Set(result, bit);
+        }
+    }
+    if (second != NULL) {
+        for (int bit = 0; (bit = parcBitVector_NextBitSet(second, bit)) >= 0; bit++) {
+            parcBitVector_Set(result, bit);
+        }
+    }
+
+    return result;
+}
+#endif
+
+static PARCBitVector *
+_parcBitVector_AndVector(const PARCBitVector *first, const PARCBitVector *second)
+{
+    PARCBitVector *result = parcBitVector_Create();
+
+    if ((first != NULL) && (second != NULL)) {
+        for (int bit = 0; (bit = parcBitVector_NextBitSet(first, bit)) >= 0; bit++) {
+            if (parcBitVector_Get(second, bit) == 1) {
+                parcBitVector_Set(result, bit);
+            }
+        }
+    }
+
+    return result;
+}
+
 bool
 athenaFIB_DeleteRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBitVector *ccnxLinkVector)
 {
     bool result = false;
 
+    // Check if this is a mapping for the default route
+    if (ccnxName_GetSegmentCount(ccnxName) == 1) {
+        CCNxNameSegment *segment = ccnxName_GetSegment(ccnxName, 0);
+        if ((ccnxNameSegment_GetType(segment) == CCNxNameLabelType_NAME) &&
+            (ccnxNameSegment_Length(segment) == 0)) {
+            if (athenaFIB->defaultRoute != NULL) {
+                PARCBitVector *linkSet = _parcBitVector_AndVector(athenaFIB->defaultRoute, ccnxLinkVector);
+                if (parcBitVector_NumberOfBitsSet(linkSet) > 0) {
+                    parcBitVector_ClearVector(athenaFIB->defaultRoute, ccnxLinkVector);
+                    result = true;
+                }
+                parcBitVector_Release(&linkSet);
+                if (parcBitVector_NumberOfBitsSet(athenaFIB->defaultRoute) == 0) {
+                    parcBitVector_Release(&(athenaFIB->defaultRoute));
+                    athenaFIB->defaultRoute = NULL;
+                }
+            }
+            return result;
+        }
+    }
+
     PARCBitVector *linkV = athenaFIB_Lookup(athenaFIB, ccnxName, NULL);
     if (linkV != NULL) {
-        if (parcBitVector_Contains(linkV, ccnxLinkVector)) {
+        // Only clear bits if the link sets intersect
+        PARCBitVector *linkSet = _parcBitVector_AndVector(linkV, ccnxLinkVector);
+        if (parcBitVector_NumberOfBitsSet(linkSet) > 0) {
             parcBitVector_ClearVector(linkV, ccnxLinkVector);
             if (parcBitVector_NumberOfBitsSet(linkV) == 0) {
                 parcHashMap_Remove(athenaFIB->tableByName, (PARCObject *) ccnxName);
             }
-            int bit = 0;
-            while ((bit = parcBitVector_NextBitSet(ccnxLinkVector, bit)) >= 0) {
+            //
+            // Traverse each referenced interface list and remove the route if a reference is found there.
+            //
+            for (int bit = 0; (bit = parcBitVector_NextBitSet(ccnxLinkVector, bit)) >= 0; bit++) {
                 PARCList *nameList = parcList_GetAtIndex((PARCList *) athenaFIB->listOfLinks, bit);
                 if (nameList) {
                     for (int j = 0; j < parcList_Size(nameList); ++j) {
                         CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, j);
                         if (ccnxName_Equals(ccnxName, key)) {
                             parcList_RemoveAtIndex(nameList, j);
+                            ccnxName_Release(&key);
                             break;
                         }
                     }
                 }
-                bit++;
             }
             result = true;
         }
+        parcBitVector_Release(&linkSet);
         parcBitVector_Release(&linkV);
     }
 
@@ -292,12 +358,19 @@ athenaFIB_RemoveLink(AthenaFIB *athenaFIB, const PARCBitVector *ccnxLinkVector)
         }
         PARCList *nameList = parcList_GetAtIndex(athenaFIB->listOfLinks, bit);
         if (nameList != NULL) {
-            for (int j = 0; j < parcList_Size(nameList); ++j) {
-                CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, j);
+            while (parcList_Size(nameList)) {
+                CCNxName *key = (CCNxName *) parcList_GetAtIndex(nameList, 0);
                 athenaFIB_DeleteRoute(athenaFIB, key, ccnxLinkVector);
             }
             parcList_Clear(nameList);
             result = true;
+        }
+    }
+    if (athenaFIB->defaultRoute) {
+        parcBitVector_ClearVector(athenaFIB->defaultRoute, ccnxLinkVector);
+        if (parcBitVector_NumberOfBitsSet(athenaFIB->defaultRoute) == 0) {
+            parcBitVector_Release(&(athenaFIB->defaultRoute));
+            athenaFIB->defaultRoute = NULL;
         }
     }
 
@@ -338,6 +411,14 @@ athenaFIB_CreateEntryList(AthenaFIB *athenaFIB)
     PARCList *result =
         parcList(parcArrayList_Create((void (*)(void **))_athenaFIBListEntry_Release), PARCArrayListAsPARCList);
 
+    if (athenaFIB->defaultRoute != NULL) {
+        CCNxName *defaultPrefix = ccnxName_CreateFromCString("ccnx:/");
+        for (int bit = 0; (bit = parcBitVector_NextBitSet(athenaFIB->defaultRoute, bit)) >= 0; bit++) {
+            AthenaFIBListEntry *entry = _athenaFIBListEntry_Create(defaultPrefix, bit);
+            parcList_Add(result, entry);
+        }
+        ccnxName_Release(&defaultPrefix);
+    }
     for (size_t i = 0; i < parcList_Size(athenaFIB->listOfLinks); ++i) {
         PARCList *linksForId = parcList_GetAtIndex(athenaFIB->listOfLinks, i);
         if (linksForId != NULL) {
