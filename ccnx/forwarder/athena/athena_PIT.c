@@ -664,28 +664,17 @@ _athenaPIT_LookupKey(AthenaPIT *athenaPIT, PARCBuffer *key, PARCBitVector *egres
     }
 }
 
-static PARCBitVector *
-_athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
-                        const CCNxName *name,
-                        const PARCBuffer *keyId,
-                        const PARCBuffer *contentId,
-                        const PARCBitVector *ingressVector)
+PARCBitVector *
+athenaPIT_Match(AthenaPIT *athenaPIT,
+                const CCNxName *name,
+                const PARCBuffer *keyId,
+                const PARCBuffer *contentId,
+                const PARCBitVector *ingressVector)
 {
     //TODO: Add egress check.
 
+    PARCBuffer *key;
     PARCBitVector *result = parcBitVector_Create();
-
-    // Match based on Name alone
-    PARCBuffer *key = _athenaPIT_createCompoundKey(name, NULL);
-    _athenaPIT_LookupKey(athenaPIT, key, result);
-    parcBuffer_Release(&key);
-
-    // Match with Name and KeyId
-    if (keyId != NULL) {
-        key = _athenaPIT_createCompoundKey(name, keyId);
-        _athenaPIT_LookupKey(athenaPIT, key, result);
-        parcBuffer_Release(&key);
-    }
 
     // Match based on Name & Content Id Restriction
     // M.S. Nominally, the contentId should not be null as any content message received
@@ -695,41 +684,26 @@ _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
         key = _athenaPIT_createCompoundKey(name, contentId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
+        return result;
     }
 
-    return result;
-}
-
-static PARCBitVector *
-_athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
-                        const CCNxName *name,
-                        const PARCBuffer *keyId,
-                        const PARCBuffer *contentId,
-                        const PARCBitVector *ingressVector)
-{
-    PARCBitVector *result = parcBitVector_Create();
-
-    if (contentId != NULL) {
-        PARCBuffer *key = _athenaPIT_createCompoundKey(NULL, contentId);
+    // Match with Name and KeyId
+    if (keyId != NULL) {
+        key = _athenaPIT_createCompoundKey(name, keyId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
+        return result;
+    }
+
+    // Match based on Name alone
+    key = _athenaPIT_createCompoundKey(name, NULL);
+    _athenaPIT_LookupKey(athenaPIT, key, result);
+    parcBuffer_Release(&key);
+    if (parcBitVector_NumberOfBitsSet(result) == 0) {
+        return result;
     }
 
     return result;
-}
-
-PARCBitVector *
-athenaPIT_Match(AthenaPIT *athenaPIT,
-                const CCNxName *name,
-                const PARCBuffer *keyId,
-                const PARCBuffer *digest,
-                const PARCBitVector *ingressVector)
-{
-    if (name == NULL) {
-        return _athenaPIT_MatchNameless(athenaPIT, name, keyId, digest, ingressVector);
-    } else {
-        return _athenaPIT_MatchWithName(athenaPIT, name, keyId, digest, ingressVector);
-    }
 }
 
 bool
