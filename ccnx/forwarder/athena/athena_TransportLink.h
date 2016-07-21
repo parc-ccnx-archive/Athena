@@ -64,7 +64,6 @@
 #include <parc/algol/parc_BitVector.h>
 #include <parc/algol/parc_FileOutputStream.h>
 #include <parc/logging/parc_Log.h>
-#include <parc/logging/parc_LogReporterFile.h>
 
 /**
  * @typedef AthenaTransportLink
