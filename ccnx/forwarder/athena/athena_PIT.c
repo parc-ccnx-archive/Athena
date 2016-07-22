@@ -681,28 +681,41 @@ athenaPIT_Match(AthenaPIT *athenaPIT,
     // M.S. Nominally, the contentId should not be null as any content message received
     // should be hashable. But because locally generated contentObjects are not currently
     // hashable, we need to support this case.
+    //if ((contentId != NULL) && (keyId == NULL)) {
     if (contentId != NULL) {
         key = _athenaPIT_createCompoundKey(name, contentId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
-        return result;
+        if (parcBitVector_NumberOfBitsSet(result) > 0) {
+            return result;
+        }
     }
 
     // Match with Name and KeyId
+    //if ((keyId != NULL) && (contentId == NULL)) {
     if (keyId != NULL) {
         key = _athenaPIT_createCompoundKey(name, keyId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
-        return result;
+        if (parcBitVector_NumberOfBitsSet(result) > 0) {
+            return result;
+        }
     }
+
+    // Match with Name, KeyId and ContentId
+    //if ((contentId != NULL) && (keyId != NULL)) {
+        //key = _athenaPIT_createCompoundKey(name, contentId);
+        //_athenaPIT_LookupKey(athenaPIT, key, result);
+        //parcBuffer_Release(&key);
+        //if (parcBitVector_NumberOfBitsSet(result) > 0) {
+            //return result;
+        //}
+    //}
 
     // Match based on Name alone
     key = _athenaPIT_createCompoundKey(name, NULL);
     _athenaPIT_LookupKey(athenaPIT, key, result);
     parcBuffer_Release(&key);
-    if (parcBitVector_NumberOfBitsSet(result) == 0) {
-        return result;
-    }
 
     return result;
 }

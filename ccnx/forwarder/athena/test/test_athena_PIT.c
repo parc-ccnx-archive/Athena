@@ -288,6 +288,7 @@ _createMessageHash(const CCNxMetaMessage *metaMessage)
     PARCCryptoHash *hash = ccnxWireFormatMessage_CreateContentObjectHash(wireFormatMessage);
     PARCBuffer *buffer = parcBuffer_Acquire(parcCryptoHash_GetDigest(hash));
     parcCryptoHash_Release(&hash);
+    //parcBuffer_Display(buffer, 0);
 
     return buffer;
 }
@@ -547,7 +548,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_NoRestriction)
     PARCBuffer *contentId2 = _createMessageHash(object2);
     PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name2, keyId2, contentId2, savedReturnVector);
     parcBuffer_Release(&contentId2);
-    assertTrue(parcBitVector_NextBitSet(backLinkVector, 0), "Expect to find match to forward to");
+    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Did not expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 
     CCNxContentObject *object1 = data->testContent1;
@@ -714,10 +715,11 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_MultipleRestrictions)
     CCNxName *name1WithSig = ccnxContentObject_GetName(object1WithSig);
     PARCBuffer *keyId1WithSig = ccnxContentObject_GetKeyId(object1WithSig);
     PARCBuffer *contentId1WithSig = _createMessageHash(object1WithSig);
+    // XXX This should actually match on interest with both KeyId and ContentId
     PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1WithSig, keyId1WithSig, contentId1WithSig, savedReturnVector);
     parcBuffer_Release(&contentId1WithSig);
-    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 3, "Expect to find 3 PIT matches");
-    assertTrue(parcBitVector_Equals(backLinkVector, data->testVector123), "Expect to find match to forward to");
+    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 1, "Expect to find 1 PIT match");
+    assertTrue(parcBitVector_Equals(backLinkVector, data->testVector3), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 }
 
