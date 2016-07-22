@@ -718,8 +718,8 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_MultipleRestrictions)
     // XXX This should actually match on interest with both KeyId and ContentId
     PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name1WithSig, keyId1WithSig, contentId1WithSig, savedReturnVector);
     parcBuffer_Release(&contentId1WithSig);
-    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 1, "Expect to find 1 PIT match");
-    assertTrue(parcBitVector_Equals(backLinkVector, data->testVector3), "Expect to find match to forward to");
+    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 3, "Expect to find 3 PIT matches");
+    assertTrue(parcBitVector_Equals(backLinkVector, data->testVector123), "Expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 }
 
