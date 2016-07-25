@@ -314,6 +314,12 @@ _athenaPIT_createCompoundKey(const CCNxName *name, const PARCBuffer *contentId, 
         parcBufferComposer_PutBuffer(composer, keyId);
     }
 
+    // We add a unique byte to the end of the KeyId so it doesn't collide with
+    // potentially identical ContentId entries.
+    if ((keyId != NULL) && (contentId == NULL)) {
+        parcBufferComposer_PutString(composer, "K");
+    }
+
     PARCBuffer *key = parcBufferComposer_ProduceBuffer(composer);
 
     parcBufferComposer_Release(&composer);
@@ -672,19 +678,28 @@ athenaPIT_Match(AthenaPIT *athenaPIT,
     PARCBitVector *result = parcBitVector_Create();
 
     // Match based on Name & Content Id Restriction & Key Id
-    key = _athenaPIT_createCompoundKey(name, contentId, keyId);
-    _athenaPIT_LookupKey(athenaPIT, key, result);
-    parcBuffer_Release(&key);
+    if ((contentId != NULL) && (keyId != NULL)) {
+        key = _athenaPIT_createCompoundKey(name, contentId, keyId);
+        _athenaPIT_LookupKey(athenaPIT, key, result);
+        parcBuffer_Release(&key);
+    }
 
     // Match based on Name & Content Id Restriction
-    key = _athenaPIT_createCompoundKey(name, contentId, NULL);
-    _athenaPIT_LookupKey(athenaPIT, key, result);
-    parcBuffer_Release(&key);
+    // M.S. Nominally, the contentId should not be null as any content message received
+    // should be hashable. But because locally generated contentObjects are not currently
+    // hashable, we need to support this case.
+    if (contentId != NULL) {
+        key = _athenaPIT_createCompoundKey(name, contentId, NULL);
+        _athenaPIT_LookupKey(athenaPIT, key, result);
+        parcBuffer_Release(&key);
+    }
 
     // Match based on Name & Key Id
-    key = _athenaPIT_createCompoundKey(name, NULL, keyId);
-    _athenaPIT_LookupKey(athenaPIT, key, result);
-    parcBuffer_Release(&key);
+    if (keyId != NULL) {
+        key = _athenaPIT_createCompoundKey(name, NULL, keyId);
+        _athenaPIT_LookupKey(athenaPIT, key, result);
+        parcBuffer_Release(&key);
+    }
 
     // Match based on Name only
     key = _athenaPIT_createCompoundKey(name, NULL, NULL);
