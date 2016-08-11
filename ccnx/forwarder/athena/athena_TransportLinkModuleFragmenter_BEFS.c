@@ -166,7 +166,7 @@ _BEFS_CreateFragmenterData()
 _BEFS_fragmenterData *
 _BEFS_GetFragmenterData(AthenaFragmenter *athenaFragmenter)
 {
-    return (_BEFS_fragmenterData*)athenaFragmenter->fragmenterData;
+    return (_BEFS_fragmenterData *) athenaFragmenter->fragmenterData;
 }
 
 void
@@ -304,19 +304,22 @@ _BEFS_ReceiveAndReassemble(AthenaFragmenter *athenaFragmenter, PARCBuffer *wireF
     assertTrue(header->packetType == METIS_PACKET_TYPE_HOPFRAG, "BEFS Unknown fragment type (%d)", header->packetType);
     uint32_t seqnum = _hopByHopHeader_GetSeqnum(header);
 
-    // If we're idle and the message is a begin fragment then continue on.
-    if (fragmenterData->idle) {
-        if (_hopByHopHeader_GetBFlag(header)) {
-            parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received begin fragment");
-            _BEFS_ClearFragmenterData(athenaFragmenter);
-            fragmenterData->idle = false;
-        } else {
-            parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received fragment while idle");
+    // If the message is a begin fragment then reset
+    if (_hopByHopHeader_GetBFlag(header)) {
+        parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink), "Received begin fragment");
+        _BEFS_ClearFragmenterData(athenaFragmenter);
+        fragmenterData->idle = false;
+    } else {
+        // If it's an old sequence number it may just be a dup.
+        if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber) < 0) {
+            parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
+                          "Received old sequence (%zu < %zu)",
+                          seqnum, fragmenterData->receiveSequenceNumber);
+            parcBuffer_Release(&wireFormatBuffer);
             return NULL;
         }
-    } else {
         // If it's not a sequence number we were expecting, clean everything out and start over.
-        if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber)  != 0) {
+        if (_compareSequenceNumbers(seqnum, fragmenterData->receiveSequenceNumber) != 0) {
             parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
                           "Received fragment out of sequence (%zu != %zu)",
                           seqnum, fragmenterData->receiveSequenceNumber);
@@ -446,9 +449,9 @@ athenaFragmenter_BEFS_Init(AthenaFragmenter *athenaFragmenter)
         parcLog_Debug(athenaTransportLink_GetLogger(athenaFragmenter->athenaTransportLink),
                       "Creating BEFS fragmenter");
         athenaFragmenter->fragmenterData = _BEFS_CreateFragmenterData();
-        athenaFragmenter->createFragment = (AthenaFragmenter_CreateFragment *)_BEFS_CreateFragment;
-        athenaFragmenter->receiveFragment = (AthenaFragmenter_ReceiveFragment *)_BEFS_ReceiveAndReassemble;
-        athenaFragmenter->fini = (AthenaFragmenter_Fini *)_athenaFragmenter_BEFS_Fini;
+        athenaFragmenter->createFragment = (AthenaFragmenter_CreateFragment *) _BEFS_CreateFragment;
+        athenaFragmenter->receiveFragment = (AthenaFragmenter_ReceiveFragment *) _BEFS_ReceiveAndReassemble;
+        athenaFragmenter->fini = (AthenaFragmenter_Fini *) _athenaFragmenter_BEFS_Fini;
     }
     return athenaFragmenter;
 }

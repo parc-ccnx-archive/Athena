@@ -324,6 +324,7 @@ athenaTransportLinkModule_GetMessageIoVector(CCNxMetaMessage *message)
         } else {
             CCNxCodecNetworkBuffer *netbuff = ccnxCodecNetworkBuffer_Create(&ParcMemoryMemoryBlock, NULL);
             assertNotNull(netbuff, "Null network buffer allocation");
+            parcBuffer_SetPosition(buffer, 0);
             ccnxCodecNetworkBuffer_PutBuffer(netbuff, buffer);
             iovec = ccnxCodecNetworkBuffer_CreateIoVec(netbuff);
             ccnxCodecNetworkBuffer_Release(&netbuff);

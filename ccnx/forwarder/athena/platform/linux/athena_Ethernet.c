@@ -233,20 +233,41 @@ athenaEthernet_Receive(AthenaEthernet *athenaEthernet, int timeout, AthenaTransp
     return wireFormatBuffer;
 }
 
+static unsigned char padding[ETHER_MIN_LEN] = { 0 };
+
 ssize_t
 athenaEthernet_Send(AthenaEthernet *athenaEthernet, struct iovec *iov, int iovcnt)
 {
     ssize_t writeCount;
 
-    writeCount = writev(athenaEthernet->fd, iov, iovcnt);
+    // If the message is less than the required minimum packet size we must pad it out
+    size_t messageLength = 0;
+    for (int i = 0; i < iovcnt; i++) {
+        messageLength += iov[i].iov_len;
+    }
+    if (messageLength < ETHER_MIN_LEN) {
+        struct iovec paddedIovec[iovcnt + 1];
+        bzero(padding, ETHER_MIN_LEN - messageLength);
+
+        for (int i = 0; i < iovcnt; i++) {
+            paddedIovec[i].iov_len = iov[i].iov_len;
+            paddedIovec[i].iov_base = iov[i].iov_base;
+        }
+        paddedIovec[iovcnt].iov_len = ETHER_MIN_LEN - messageLength;
+        paddedIovec[iovcnt].iov_base = padding;
+        iovcnt++;
+        writeCount = writev(athenaEthernet->fd, paddedIovec, iovcnt);
+    } else {
+        writeCount = writev(athenaEthernet->fd, iov, iovcnt);
+    }
 
     if (writeCount == -1) {
         parcLog_Error(athenaEthernet->log, "writev: %s", strerror(errno));
     } else {
-        parcLog_Debug(athenaEthernet->log, "sending message (size=%d)", writeCount);
+        parcLog_Debug(athenaEthernet->log, "sending message (size=%d/%d)", writeCount, messageLength);
     }
 
-    return writeCount;
+    return (writeCount < messageLength) ? writeCount : messageLength;
 }
 
 int
