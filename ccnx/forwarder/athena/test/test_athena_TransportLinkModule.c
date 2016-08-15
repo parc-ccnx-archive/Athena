@@ -246,11 +246,23 @@ LONGBOW_TEST_CASE(Global, athenaTransportLinkModule_CreateMessageBuffer)
 {
     CCNxName *name = ccnxName_CreateFromCString("ccnx:/local/forwarder/Module");
     CCNxInterest *interest = ccnxInterest_CreateSimple(name);
-    ccnxName_Release(&name);
     PARCBuffer *buffer = athenaTransportLinkModule_CreateMessageBuffer(interest);
     assertNotNull(buffer, "Empty buffer from athenaTransportLinkModule_CreateMessageBuffer");
     parcBuffer_Release(&buffer);
     ccnxInterest_Release(&interest);
+
+    interest = ccnxInterest_CreateSimple(name);
+    size_t largePayloadSize = (64 * 1024) - 1;
+    char largePayload[largePayloadSize];
+    PARCBuffer *payload = parcBuffer_Wrap((void *)largePayload, largePayloadSize, 0, largePayloadSize);
+    ccnxInterest_SetPayload(interest, payload);
+    buffer = athenaTransportLinkModule_CreateMessageBuffer(interest);
+    assertNotNull(buffer, "Empty buffer from athenaTransportLinkModule_CreateMessageBuffer");
+    parcBuffer_Release(&buffer);
+    parcBuffer_Release(&payload);
+    ccnxInterest_Release(&interest);
+
+    ccnxName_Release(&name);
 }
 
 LONGBOW_TEST_CASE(Global, athenaTransportLinkModule_GetMessageIoVector)
