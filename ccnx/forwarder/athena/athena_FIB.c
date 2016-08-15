@@ -249,51 +249,6 @@ athenaFIB_AddRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBit
     return true;
 }
 
-// This method is currently unused, but is available for integration along with *AndVector (see issue 4050)
-#ifdef __GNUC__
-__attribute__ ((unused))
-#else
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
-static PARCBitVector *
-_parcBitVector_OrVector(const PARCBitVector *first, const PARCBitVector *second)
-{
-    PARCBitVector *result = parcBitVector_Create();
-
-    if (first != NULL) {
-        for (int bit = 0; (bit = parcBitVector_NextBitSet(first, bit)) >= 0; bit++) {
-            parcBitVector_Set(result, bit);
-        }
-    }
-    if (second != NULL) {
-        for (int bit = 0; (bit = parcBitVector_NextBitSet(second, bit)) >= 0; bit++) {
-            parcBitVector_Set(result, bit);
-        }
-    }
-
-    return result;
-}
-#ifndef __GNUC__
-#pragma GCC diagnostic pop
-#endif
-
-static PARCBitVector *
-_parcBitVector_AndVector(const PARCBitVector *first, const PARCBitVector *second)
-{
-    PARCBitVector *result = parcBitVector_Create();
-
-    if ((first != NULL) && (second != NULL)) {
-        for (int bit = 0; (bit = parcBitVector_NextBitSet(first, bit)) >= 0; bit++) {
-            if (parcBitVector_Get(second, bit) == 1) {
-                parcBitVector_Set(result, bit);
-            }
-        }
-    }
-
-    return result;
-}
-
 bool
 athenaFIB_DeleteRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARCBitVector *ccnxLinkVector)
 {
@@ -305,7 +260,7 @@ athenaFIB_DeleteRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARC
         if ((ccnxNameSegment_GetType(segment) == CCNxNameLabelType_NAME) &&
             (ccnxNameSegment_Length(segment) == 0)) {
             if (athenaFIB->defaultRoute != NULL) {
-                PARCBitVector *linkSet = _parcBitVector_AndVector(athenaFIB->defaultRoute, ccnxLinkVector);
+                PARCBitVector *linkSet = parcBitVector_And(athenaFIB->defaultRoute, ccnxLinkVector);
                 if (parcBitVector_NumberOfBitsSet(linkSet) > 0) {
                     parcBitVector_ClearVector(athenaFIB->defaultRoute, ccnxLinkVector);
                     result = true;
@@ -323,7 +278,7 @@ athenaFIB_DeleteRoute(AthenaFIB *athenaFIB, const CCNxName *ccnxName, const PARC
     PARCBitVector *linkV = athenaFIB_Lookup(athenaFIB, ccnxName, NULL);
     if (linkV != NULL) {
         // Only clear bits if the link sets intersect
-        PARCBitVector *linkSet = _parcBitVector_AndVector(linkV, ccnxLinkVector);
+        PARCBitVector *linkSet = parcBitVector_And(linkV, ccnxLinkVector);
         if (parcBitVector_NumberOfBitsSet(linkSet) > 0) {
             parcBitVector_ClearVector(linkV, ccnxLinkVector);
             if (parcBitVector_NumberOfBitsSet(linkV) == 0) {
