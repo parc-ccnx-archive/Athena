@@ -296,9 +296,9 @@ athenaPIT_Create()
     return athenaPIT_CreateCapacity(DEFAULT_CAPACITY);
 }
 
-// Returns a buffer that is a concatination of a CCNxName and an input buffer
+// Returns a buffer that is a concatination of a CCNxName and optional contentId/keyId components
 static PARCBuffer *
-_athenaPIT_createCompoundKey(const CCNxName *name, const PARCBuffer *buffer)
+_athenaPIT_createCompoundKey(const CCNxName *name, const PARCBuffer *contentId, const PARCBuffer *keyId)
 {
     PARCBufferComposer *composer = parcBufferComposer_Create();
 
@@ -306,8 +306,18 @@ _athenaPIT_createCompoundKey(const CCNxName *name, const PARCBuffer *buffer)
         composer = ccnxName_BuildString(name, composer);
     }
 
-    if (buffer != NULL) {
-        parcBufferComposer_PutBuffer(composer, buffer);
+    if (contentId != NULL) {
+        parcBufferComposer_PutBuffer(composer, contentId);
+    }
+
+    if (keyId != NULL) {
+        parcBufferComposer_PutBuffer(composer, keyId);
+    }
+
+    // We add a unique byte to the end of the KeyId so it doesn't collide with
+    // potentially identical ContentId entries.
+    if ((keyId != NULL) && (contentId == NULL)) {
+        parcBufferComposer_PutString(composer, "K");
     }
 
     PARCBuffer *key = parcBufferComposer_ProduceBuffer(composer);
@@ -323,20 +333,10 @@ _athenaPIT_acquireInterestKey(const CCNxInterest *interest)
 {
     PARCBuffer *result = NULL;
     CCNxName *name = ccnxInterest_GetName(interest);
-
     PARCBuffer *hash = ccnxInterest_GetContentObjectHashRestriction(interest);
-    if (hash != NULL) {
-        result = _athenaPIT_createCompoundKey(name, hash);
-        return result;
-    }
-
     PARCBuffer *keyId = ccnxInterest_GetKeyIdRestriction(interest);
-    if (keyId != NULL) {
-        result = _athenaPIT_createCompoundKey(name, keyId);
-        return result;
-    }
 
-    result = _athenaPIT_createCompoundKey(name, NULL);
+    result = _athenaPIT_createCompoundKey(name, hash, keyId);
 
     return result;
 }
@@ -555,7 +555,7 @@ athenaPIT_AddInterest(AthenaPIT *athenaPIT,
             // Add an entry without a name, but only if a ContentObjectHashRestriction was provided
             const PARCBuffer *contentId = ccnxInterest_GetContentObjectHashRestriction(ccnxInterestMessage);
             if (contentId != NULL) {
-                PARCBuffer *namelessKey = _athenaPIT_createCompoundKey(NULL, contentId);
+                PARCBuffer *namelessKey = _athenaPIT_createCompoundKey(NULL, contentId, NULL);
 
                 _AthenaPITEntry *namelessEntry =
                         _athenaPITEntry_Create(namelessKey, ccnxInterestMessage, ingressVector, newEgressVector, expiration, now);
@@ -665,25 +665,21 @@ _athenaPIT_LookupKey(AthenaPIT *athenaPIT, PARCBuffer *key, PARCBitVector *egres
     }
 }
 
-static PARCBitVector *
-_athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
-                        const CCNxName *name,
-                        const PARCBuffer *keyId,
-                        const PARCBuffer *contentId,
-                        const PARCBitVector *ingressVector)
+PARCBitVector *
+athenaPIT_Match(AthenaPIT *athenaPIT,
+                const CCNxName *name,
+                const PARCBuffer *keyId,
+                const PARCBuffer *contentId,
+                const PARCBitVector *ingressVector)
 {
     //TODO: Add egress check.
 
+    PARCBuffer *key;
     PARCBitVector *result = parcBitVector_Create();
 
-    // Match based on Name alone
-    PARCBuffer *key = _athenaPIT_createCompoundKey(name, NULL);
-    _athenaPIT_LookupKey(athenaPIT, key, result);
-    parcBuffer_Release(&key);
-
-    // Match with Name and KeyId
-    if (keyId != NULL) {
-        key = _athenaPIT_createCompoundKey(name, keyId);
+    // Match based on Name & Content Id Restriction & Key Id
+    if ((contentId != NULL) && (keyId != NULL)) {
+        key = _athenaPIT_createCompoundKey(name, contentId, keyId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
@@ -693,44 +689,24 @@ _athenaPIT_MatchWithName(AthenaPIT *athenaPIT,
     // should be hashable. But because locally generated contentObjects are not currently
     // hashable, we need to support this case.
     if (contentId != NULL) {
-        key = _athenaPIT_createCompoundKey(name, contentId);
+        key = _athenaPIT_createCompoundKey(name, contentId, NULL);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
 
-    return result;
-}
-
-static PARCBitVector *
-_athenaPIT_MatchNameless(AthenaPIT *athenaPIT,
-                        const CCNxName *name,
-                        const PARCBuffer *keyId,
-                        const PARCBuffer *contentId,
-                        const PARCBitVector *ingressVector)
-{
-    PARCBitVector *result = parcBitVector_Create();
-
-    if (contentId != NULL) {
-        PARCBuffer *key = _athenaPIT_createCompoundKey(NULL, contentId);
+    // Match based on Name & Key Id
+    if (keyId != NULL) {
+        key = _athenaPIT_createCompoundKey(name, NULL, keyId);
         _athenaPIT_LookupKey(athenaPIT, key, result);
         parcBuffer_Release(&key);
     }
 
-    return result;
-}
+    // Match based on Name only
+    key = _athenaPIT_createCompoundKey(name, NULL, NULL);
+    _athenaPIT_LookupKey(athenaPIT, key, result);
+    parcBuffer_Release(&key);
 
-PARCBitVector *
-athenaPIT_Match(AthenaPIT *athenaPIT,
-                const CCNxName *name,
-                const PARCBuffer *keyId,
-                const PARCBuffer *digest,
-                const PARCBitVector *ingressVector)
-{
-    if (name == NULL) {
-        return _athenaPIT_MatchNameless(athenaPIT, name, keyId, digest, ingressVector);
-    } else {
-        return _athenaPIT_MatchWithName(athenaPIT, name, keyId, digest, ingressVector);
-    }
+    return result;
 }
 
 bool
@@ -974,7 +950,7 @@ athenaPIT_CreateEntryList(const AthenaPIT *athenaPIT)
             (ccnxInterest_GetKeyIdRestriction(entry->ccnxMessage) != NULL);
         bool nameless = false;
         if (hashRestricted) {
-            PARCBuffer *testKey = _athenaPIT_createCompoundKey(NULL, contentId);
+            PARCBuffer *testKey = _athenaPIT_createCompoundKey(NULL, contentId, NULL);
             nameless = parcBuffer_Equals(testKey, entry->key);
             parcBuffer_Release(&testKey);
         }
