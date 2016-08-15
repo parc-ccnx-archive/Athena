@@ -547,7 +547,7 @@ LONGBOW_TEST_CASE(Global, athenaPIT_Match_NoRestriction)
     PARCBuffer *contentId2 = _createMessageHash(object2);
     PARCBitVector *backLinkVector = athenaPIT_Match(data->testPIT, name2, keyId2, contentId2, savedReturnVector);
     parcBuffer_Release(&contentId2);
-    assertTrue(parcBitVector_NextBitSet(backLinkVector, 0), "Expect to find match to forward to");
+    assertTrue(parcBitVector_NumberOfBitsSet(backLinkVector) == 0, "Did not expect to find match to forward to");
     parcBitVector_Release(&backLinkVector);
 
     CCNxContentObject *object1 = data->testContent1;
