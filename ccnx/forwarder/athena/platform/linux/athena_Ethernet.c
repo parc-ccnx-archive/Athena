@@ -233,6 +233,7 @@ athenaEthernet_Receive(AthenaEthernet *athenaEthernet, int timeout, AthenaTransp
     return wireFormatBuffer;
 }
 
+// Ethernet collision detection requires a minimum packet length.
 static unsigned char padding[ETHER_MIN_LEN] = { 0 };
 
 ssize_t
